@@ -126,20 +126,25 @@ async def filled(interaction: discord.Interaction, price_per_gallon: float):
         await interaction.response.send_message("An error occurred while updating the gas price.")
 
 @client.tree.command(name="location")
-@app_commands.describe(name="Name of location", distance="Distance to location")
+@app_commands.describe(name="Name of location", distance="One way distance to location in miles")
 async def location(interaction: discord.Interaction, name: str, distance: float):
     """Adds or updates a common location and its round-trip distance."""
     try:
       conn = get_db_connection()
-      add_location(conn, name, distance)
+      round_trip_distance = distance * 2;
+      add_location(conn, name, round_trip_distance)
       conn.close()
-      await interaction.response.send_message(f"Location '{name}' with a round-trip distance of {distance} miles added/updated.")
+      await interaction.response.send_message(f"Location '{name}' with a round-trip distance of {round_trip_distance} miles added/updated. Please enter the one way distance, and the bot will calculate the distance for a round trip.")
     except Exception as e:
         logger.error(f"Error in /location command: {e}", exc_info=True)
         await interaction.response.send_message("An error occurred while adding or updating the location.")
 
 @client.tree.command(name="drove")
-@app_commands.describe(distance="Distance driven in miles or a common location name", location="Select a location if needed, otherwise enter distance.")
+@app_commands.describe(
+    distance="Distance driven in miles, or a common location name",
+    location="Select a location if needed, otherwise enter distance."
+)
+@app_commands.autocomplete(location=get_locations_autocomplete)
 async def drove(interaction: discord.Interaction, distance: str = None, location: str = None):
     """Logs miles driven and calculates cost using the current gas price."""
     try:
@@ -267,9 +272,9 @@ This bot helps track gas expenses and calculate how much each user owes.
 
 *   `/filled` **price_per_gallon**:  Updates the current gas price.
     *   **price_per_gallon:** The new price per gallon.
-*   `/location` **name** **distance**: Adds a common location and distance for that location.
+*   `/location` **name** **distance**: Adds a common location and its one-way distance. The bot automatically doubles it.
     *   **name:** The name of the location.
-    *   **distance**: the distance to that location.
+    *   **distance**: The *one way* distance to that location in miles.
 *   `/drove` **distance or location**: Records the miles driven by a user.
     *  **distance**: The distance driven in miles.
    *   **location**: A location previously set by the `/location` command.
@@ -286,10 +291,10 @@ This bot helps track gas expenses and calculate how much each user owes.
 1. **Update Gas Price:**
     `/filled 3.50` (Updates the gas price to $3.50/gallon)
 2. **Location:**
-    `/location Home 50`
+    `/location Home 25` (Sets the round-trip distance for home to 50)
 3. **Driving:**
      `/drove 50` (Records 50 miles driven)
-     `/drove Home` (Records a drive to the location "Home")
+     `/drove location: Home` (Records a drive to the location "Home")
 4. **Payment:**
     `/paid 20` (Records a payment of $20)
     `/paid 20 @OtherUser` (Records a payment of $20 for other user)
@@ -299,12 +304,26 @@ This bot helps track gas expenses and calculate how much each user owes.
 **Important Notes:**
 
 *   The bot now uses a single global gas price for all calculations. Use `/filled` to update this price.
+*  The `/location` command requires *one way* distances, and the bot will automatically calculate the round trip distance.
 *   `/settle` should only be used after you've paid your balance in full outside of the bot (e.g., via Zelle or another method).
 *   Negative balances are allowed and indicate that a user has pre-paid.
 
 If you have any questions, feel free to ask!
 """
     await interaction.response.send_message(help_message)
+
+async def get_locations_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+  conn = get_db_connection()
+  locations = get_locations(conn)
+  conn.close()
+  return [
+        app_commands.Choice(name=location[0], value=location[0])
+        for location in locations if current.lower() in location[0].lower()
+    ]
+
 
 # --- Function to start the bot ---
 async def main():
