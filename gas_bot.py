@@ -13,7 +13,14 @@ import logging
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 DATABASE_NAME = "railway" # Replace if using a specific database name
-
+try:
+    conn = psycopg2.connect(DATABASE_URL)
+    print("Connection successful")
+    conn.close()
+except Exception as e:
+    print("Connection failed:")
+    print(e)
+    
 # --- Bot Setup ---
 intents = discord.Intents.default()
 intents.message_content = True
