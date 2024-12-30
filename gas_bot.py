@@ -7,6 +7,7 @@ import datetime
 import json
 import psycopg2
 from psycopg2 import sql
+import logging
 
 # --- Configuration ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -18,6 +19,10 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 client = commands.Bot(command_prefix="/", intents=intents)
+
+# --- Logging Setup ---
+logging.basicConfig(level=logging.ERROR) # Set level for logging
+logger = logging.getLogger(__name__)
 
 # --- MPG Data ---
 DEFAULT_MPG = 20  # Default MPG for all calculations
@@ -64,7 +69,6 @@ def add_payment(conn, payer_id, payer_name, amount):
     cur.execute("INSERT INTO payments (timestamp, payer_id, payer_name, amount) VALUES (%s, %s, %s, %s)", (datetime.datetime.now().isoformat(), payer_id, payer_name, amount))
     conn.commit()
 
-
 def set_current_gas_price(conn, price_per_gallon):
     cur = conn.cursor()
     cur.execute("INSERT INTO gas_prices (price) VALUES (%s) ", (price_per_gallon,))
@@ -94,79 +98,102 @@ async def on_ready():
 @client.tree.command(name="filled")
 @app_commands.describe(price_per_gallon="Price per gallon")
 async def filled(interaction: discord.Interaction, price_per_gallon: float):
-    """Updates the current gas price."""
-    conn = get_db_connection()
-    set_current_gas_price(conn, price_per_gallon)
-    conn.close()
-    await interaction.response.send_message(f"Current gas price updated to ${price_per_gallon:.2f}")
+  try:
+        conn = get_db_connection()
+        set_current_gas_price(conn, price_per_gallon)
+        conn.close()
+        await interaction.response.send_message(f"Current gas price updated to ${price_per_gallon:.2f}")
+  except Exception as e:
+      logger.error(f"Error in /filled command: {e}", exc_info=True)
+      await interaction.response.send_message("An error occurred while updating the gas price.")
+
 
 @client.tree.command(name="drove")
 @app_commands.describe(distance="Distance driven in miles")
 async def drove(interaction: discord.Interaction, distance: float):
-    """Logs miles driven and calculates cost using the current gas price."""
-    conn = get_db_connection()
-    user_id = str(interaction.user.id)
-    user_name = interaction.user.name
-    user = get_or_create_user(conn, user_id, user_name)
-    current_price = get_current_gas_price(conn)
-    cost = calculate_cost(distance, DEFAULT_MPG, current_price)
-    total_owed = user["total_owed"] + cost
-    distance_costs = user.get("distance_costs", [])
-    distance_costs.append({"distance": distance, "cost": cost})
-    save_user_data(conn, user_id, user_name, total_owed, distance_costs)
-    conn.close()
-    await interaction.response.send_message(f"Recorded {distance} miles driven. Current cost: ${cost:.2f}")
+  try:
+        conn = get_db_connection()
+        user_id = str(interaction.user.id)
+        user_name = interaction.user.name
+        user = get_or_create_user(conn, user_id, user_name)
+        current_price = get_current_gas_price(conn)
+        cost = calculate_cost(distance, DEFAULT_MPG, current_price)
+        total_owed = user["total_owed"] + cost
+        distance_costs = user.get("distance_costs", [])
+        distance_costs.append({"distance": distance, "cost": cost})
+        save_user_data(conn, user_id, user_name, total_owed, distance_costs)
+        conn.close()
+        await interaction.response.send_message(f"Recorded {distance} miles driven. Current cost: ${cost:.2f}")
+  except Exception as e:
+      logger.error(f"Error in /drove command: {e}", exc_info=True)
+      await interaction.response.send_message("An error occurred while recording the distance driven.")
+
 
 @client.tree.command(name="balance")
 async def balance(interaction: discord.Interaction):
     """Shows how much each user owes."""
-    conn = get_db_connection()
-    user_id = str(interaction.user.id)
-    user_name = interaction.user.name
-    user = get_or_create_user(conn, user_id, user_name)
-    conn.close()
-    await interaction.response.send_message(f"Your current balance: ${user['total_owed']:.2f}")
+    try:
+        conn = get_db_connection()
+        user_id = str(interaction.user.id)
+        user_name = interaction.user.name
+        user = get_or_create_user(conn, user_id, user_name)
+        conn.close()
+        await interaction.response.send_message(f"Your current balance: ${user['total_owed']:.2f}")
+    except Exception as e:
+        logger.error(f"Error in /balance command: {e}", exc_info=True)
+        await interaction.response.send_message("An error occurred while retrieving your balance.")
+
 
 @client.tree.command(name="allbalances")
 async def allbalances(interaction: discord.Interaction):
-    """Shows the balances of all users."""
-    conn = get_db_connection()
-    users = get_all_users(conn)
-    conn.close()
-    message = "Current Balances:\n"
-    for user_id, user_data in users.items():
-        member = interaction.guild.get_member(int(user_id))
-        if member:
-            user_name = member.name
-        else:
-            user_name = user_data.get("name", "Unknown User")
-        message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
-    await interaction.response.send_message(message)
+  try:
+        conn = get_db_connection()
+        users = get_all_users(conn)
+        conn.close()
+        message = "Current Balances:\n"
+        for user_id, user_data in users.items():
+            member = interaction.guild.get_member(int(user_id))
+            if member:
+                user_name = member.name
+            else:
+                user_name = user_data.get("name", "Unknown User")
+            message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
+        await interaction.response.send_message(message)
+  except Exception as e:
+    logger.error(f"Error in /allbalances command: {e}", exc_info=True)
+    await interaction.response.send_message("An error occurred while displaying balances.")
+
 
 @client.tree.command(name="settle")
 async def settle(interaction: discord.Interaction):
-    """Resets your balance to zero."""
-    conn = get_db_connection()
-    user_id = str(interaction.user.id)
-    user_name = interaction.user.name
-    user = get_or_create_user(conn, user_id, user_name)
-    save_user_data(conn, user_id, user_name, 0, [])
-    conn.close()
-    await interaction.response.send_message("Your balance has been settled.")
+  try:
+        conn = get_db_connection()
+        user_id = str(interaction.user.id)
+        user_name = interaction.user.name
+        user = get_or_create_user(conn, user_id, user_name)
+        save_user_data(conn, user_id, user_name, 0, [])
+        conn.close()
+        await interaction.response.send_message("Your balance has been settled.")
+  except Exception as e:
+        logger.error(f"Error in /settle command: {e}", exc_info=True)
+        await interaction.response.send_message("An error occurred while settling your balance.")
 
 @client.tree.command(name="paid")
 @app_commands.describe(amount="Amount paid")
 async def paid(interaction: discord.Interaction, amount: float):
-    """Records a payment made by a user."""
-    conn = get_db_connection()
-    payer_id = str(interaction.user.id)
-    user_name = interaction.user.name
-    user = get_or_create_user(conn, payer_id, user_name)
-    total_owed = user["total_owed"] - amount
-    save_user_data(conn, payer_id, user_name, total_owed, user.get("distance_costs", []))
-    add_payment(conn, payer_id, user_name, amount)
-    conn.close()
-    await interaction.response.send_message(f"Payment of ${amount:.2f} recorded. Your new balance is ${total_owed:.2f}")
+  try:
+        conn = get_db_connection()
+        payer_id = str(interaction.user.id)
+        user_name = interaction.user.name
+        user = get_or_create_user(conn, payer_id, user_name)
+        total_owed = user["total_owed"] - amount
+        save_user_data(conn, payer_id, user_name, total_owed, user.get("distance_costs", []))
+        add_payment(conn, payer_id, user_name, amount)
+        conn.close()
+        await interaction.response.send_message(f"Payment of ${amount:.2f} recorded. Your new balance is ${total_owed:.2f}")
+  except Exception as e:
+       logger.error(f"Error in /paid command: {e}", exc_info=True)
+       await interaction.response.send_message("An error occurred while recording your payment.")
 
 @client.tree.command(name="help")
 async def help(interaction: discord.Interaction):
