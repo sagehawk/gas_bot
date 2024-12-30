@@ -80,34 +80,6 @@ def get_current_gas_price(conn):
     price = cur.fetchone()
     return price[0] if price else CURRENT_GAS_PRICE
 
-def add_location(conn, name, distance):
-    cur = conn.cursor()
-    cur.execute("INSERT INTO locations (name, distance) VALUES (%s, %s) ON CONFLICT (name) DO UPDATE SET distance=%s", (name, distance, distance))
-    conn.commit()
-
-def get_locations(conn):
-    cur = conn.cursor()
-    cur.execute("SELECT name, distance FROM locations")
-    locations = cur.fetchall()
-    return locations
-
-def get_location_distance(conn, name):
-  cur = conn.cursor()
-  cur.execute("SELECT distance FROM locations WHERE name = %s", (name,))
-  location = cur.fetchone()
-  return location[0] if location else None
-
-async def get_locations_autocomplete(
-    interaction: discord.Interaction,
-    current: str,
-) -> list[app_commands.Choice[str]]:
-  conn = get_db_connection()
-  locations = get_locations(conn)
-  conn.close()
-  return [
-        app_commands.Choice(name=location[0], value=location[0])
-        for location in locations if current.lower() in location[0].lower()
-    ]
 
 # --- Helper Functions ---
 def calculate_cost(distance, mpg, price_per_gallon):
@@ -137,27 +109,9 @@ async def filled(interaction: discord.Interaction, price_per_gallon: float):
         logger.error(f"Error in /filled command: {e}", exc_info=True)
         await interaction.response.send_message("An error occurred while updating the gas price.")
 
-@client.tree.command(name="location")
-@app_commands.describe(name="Name of location", distance="One way distance to location in miles")
-async def location(interaction: discord.Interaction, name: str, distance: float):
-    """Adds or updates a common location and its round-trip distance."""
-    try:
-      conn = get_db_connection()
-      round_trip_distance = distance * 2;
-      add_location(conn, name, round_trip_distance)
-      conn.close()
-      await interaction.response.send_message(f"Location '{name}' with a round-trip distance of {round_trip_distance} miles added/updated.")
-    except Exception as e:
-        logger.error(f"Error in /location command: {e}", exc_info=True)
-        await interaction.response.send_message("An error occurred while adding or updating the location.")
-
 @client.tree.command(name="drove")
-@app_commands.describe(
-    distance="Distance driven in miles, or a common location name",
-    location="Select a location if needed, otherwise enter distance."
-)
-@app_commands.autocomplete(location=get_locations_autocomplete)
-async def drove(interaction: discord.Interaction, distance: str = None, location: str = None):
+@app_commands.describe(distance="Distance driven in miles")
+async def drove(interaction: discord.Interaction, distance: str):
     """Logs miles driven and calculates cost using the current gas price."""
     try:
         conn = get_db_connection()
@@ -165,36 +119,18 @@ async def drove(interaction: discord.Interaction, distance: str = None, location
         user_name = interaction.user.name
         user = get_or_create_user(conn, user_id, user_name)
         current_price = get_current_gas_price(conn)
-        if location is not None:
-          distance_from_location = get_location_distance(conn, location)
-          if distance_from_location is not None:
-            cost = calculate_cost(distance_from_location, DEFAULT_MPG, current_price)
-            total_owed = user["total_owed"] + cost
-            distance_costs = user.get("distance_costs", [])
-            distance_costs.append({"distance": distance_from_location, "cost": cost})
-            save_user_data(conn, user_id, user_name, total_owed, distance_costs)
-            conn.close()
-            await interaction.response.send_message(f"Recorded {location} as distance driven. Current cost: ${cost:.2f}")
-          else:
-             conn.close()
-             await interaction.response.send_message(f"The location: {location} was not recognised. Please specify a distance")
-        elif distance is not None:
-          try:
-            distance_float = float(distance)
-            cost = calculate_cost(distance_float, DEFAULT_MPG, current_price)
-            total_owed = user["total_owed"] + cost
-            distance_costs = user.get("distance_costs", [])
-            distance_costs.append({"distance": distance_float, "cost": cost})
-            save_user_data(conn, user_id, user_name, total_owed, distance_costs)
-            conn.close()
-            await interaction.response.send_message(f"Recorded {distance} miles driven. Current cost: ${cost:.2f}")
-          except ValueError:
-             conn.close()
-             await interaction.response.send_message(f"The value {distance} is not recognised as a location, or a valid milage. Please specify a valid milage or location.")
-        else:
+        try:
+           distance_float = float(distance)
+           cost = calculate_cost(distance_float, DEFAULT_MPG, current_price)
+           total_owed = user["total_owed"] + cost
+           distance_costs = user.get("distance_costs", [])
+           distance_costs.append({"distance": distance_float, "cost": cost})
+           save_user_data(conn, user_id, user_name, total_owed, distance_costs)
            conn.close()
-           await interaction.response.send_message(f"Please specify a distance or location.")
-
+           await interaction.response.send_message(f"Recorded {distance} miles driven. Current cost: ${cost:.2f}")
+        except ValueError:
+             conn.close()
+             await interaction.response.send_message(f"The value {distance} is not a valid number. Please specify a valid milage.")
     except Exception as e:
         logger.error(f"Error in /drove command: {e}", exc_info=True)
         await interaction.response.send_message("An error occurred while recording the distance driven.")
@@ -284,12 +220,8 @@ This bot helps track gas expenses and calculate how much each user owes.
 
 *   `/filled` **price_per_gallon**:  Updates the current gas price.
     *   **price_per_gallon:** The new price per gallon.
-*   `/location` **name** **distance**: Adds a common location and its *one-way* distance. The bot automatically doubles it.
-    *   **name:** The name of the location.
-    *   **distance**: The *one way* distance to that location in miles.
-*   `/drove` **distance or location**: Records the miles driven by a user.
+*   `/drove` **distance**: Records the miles driven by a user.
     *  **distance**: The distance driven in miles.
-   *   **location**: A location previously set by the `/location` command, which will show in a drop down menu.
 *   `/balance`: Shows your current balance (how much you owe or are owed).
 *   `/allbalances`: Shows the balances of all users.
 *   `/paid` **amount**: Records a payment you made towards your balance.
@@ -302,11 +234,8 @@ This bot helps track gas expenses and calculate how much each user owes.
 
 1. **Update Gas Price:**
     `/filled 3.50` (Updates the gas price to $3.50/gallon)
-2. **Location:**
-    `/location Home 25` (Sets the round-trip distance for home to 50)
-3. **Driving:**
+2. **Driving:**
      `/drove 50` (Records 50 miles driven)
-     `/drove location: Home` (Records a drive to the location "Home")
 4. **Payment:**
     `/paid 20` (Records a payment of $20)
     `/paid 20 @OtherUser` (Records a payment of $20 for other user)
@@ -316,7 +245,6 @@ This bot helps track gas expenses and calculate how much each user owes.
 **Important Notes:**
 
 *   The bot now uses a single global gas price for all calculations. Use `/filled` to update this price.
-*  The `/location` command requires *one way* distances, and the bot will automatically calculate the round trip distance.
 *   `/settle` should only be used after you've paid your balance in full outside of the bot (e.g., via Zelle or another method).
 *   Negative balances are allowed and indicate that a user has pre-paid.
 
