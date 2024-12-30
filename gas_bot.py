@@ -97,6 +97,18 @@ def get_location_distance(conn, name):
   location = cur.fetchone()
   return location[0] if location else None
 
+async def get_locations_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+  conn = get_db_connection()
+  locations = get_locations(conn)
+  conn.close()
+  return [
+        app_commands.Choice(name=location[0], value=location[0])
+        for location in locations if current.lower() in location[0].lower()
+    ]
+
 # --- Helper Functions ---
 def calculate_cost(distance, mpg, price_per_gallon):
     gallons_used = distance / mpg
@@ -272,12 +284,12 @@ This bot helps track gas expenses and calculate how much each user owes.
 
 *   `/filled` **price_per_gallon**:  Updates the current gas price.
     *   **price_per_gallon:** The new price per gallon.
-*   `/location` **name** **distance**: Adds a common location and its one-way distance. The bot automatically doubles it.
+*   `/location` **name** **distance**: Adds a common location and its *one-way* distance. The bot automatically doubles it.
     *   **name:** The name of the location.
     *   **distance**: The *one way* distance to that location in miles.
 *   `/drove` **distance or location**: Records the miles driven by a user.
     *  **distance**: The distance driven in miles.
-   *   **location**: A location previously set by the `/location` command.
+   *   **location**: A location previously set by the `/location` command, which will show in a drop down menu.
 *   `/balance`: Shows your current balance (how much you owe or are owed).
 *   `/allbalances`: Shows the balances of all users.
 *   `/paid` **amount**: Records a payment you made towards your balance.
@@ -311,19 +323,6 @@ This bot helps track gas expenses and calculate how much each user owes.
 If you have any questions, feel free to ask!
 """
     await interaction.response.send_message(help_message)
-
-async def get_locations_autocomplete(
-    interaction: discord.Interaction,
-    current: str,
-) -> list[app_commands.Choice[str]]:
-  conn = get_db_connection()
-  locations = get_locations(conn)
-  conn.close()
-  return [
-        app_commands.Choice(name=location[0], value=location[0])
-        for location in locations if current.lower() in location[0].lower()
-    ]
-
 
 # --- Function to start the bot ---
 async def main():
