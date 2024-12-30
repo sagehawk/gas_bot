@@ -1,0 +1,89 @@
+{
+    "fill_ups": [],
+    "users": {
+        "513552727096164378": {
+            "name": "oneofzero",
+            "total_owed": 13.88,
+            "distance_costs": [
+                {
+                    "distance": 1.0,
+                    "cost": 0.165
+                },
+                {
+                    "distance": 20.0,
+                    "cost": 3.3
+                },
+                {
+                    "distance": 20.0,
+                    "cost": 3.0
+                },
+                {
+                    "distance": 12.0,
+                    "cost": 1.9799999999999998
+                },
+                {
+                    "distance": 39.1,
+                    "cost": 6.4515
+                },
+                {
+                    "distance": 20.0,
+                    "cost": 3.3
+                },
+                {
+                    "distance": 33.0,
+                    "cost": 5.444999999999999
+                }
+            ]
+        },
+        "393241098002235392": {
+            "name": "agent7213",
+            "total_owed": 2.38,
+             "distance_costs": [
+                {
+                    "distance": 14.4,
+                    "cost": 2.16
+                },
+                {
+                    "distance": 14.4,
+                    "cost": 2.376
+                }
+            ]
+        },
+        "858864178962235393": {
+            "name": "mrmario9577",
+            "total_owed": 0.82,
+            "distance_costs": [
+                {
+                    "distance": 5.0,
+                    "cost": 0.825
+                }
+                
+            ]
+        },
+        "838206242127085629": {
+            "name": "yoshisaki",
+            "total_owed": 0.91,
+             "distance_costs": [
+                {
+                    "distance": 5.5,
+                    "cost": 0.9075
+                }
+            ]
+        }
+    },
+    "payments": [
+        {
+            "timestamp": "2024-12-28T01:21:05.365278",
+            "payer_id": "513552727096164378",
+            "payer_name": "oneofzero",
+            "amount": 6.46
+        },
+        {
+            "timestamp": "2024-12-28T02:54:20.346793",
+            "payer_id": "513552727096164378",
+            "payer_name": "oneofzero",
+            "amount": 3.3
+        }
+    ],
+    "current_gas_price": 3.3
+}
