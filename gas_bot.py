@@ -146,7 +146,7 @@ async def location(interaction: discord.Interaction, name: str, distance: float)
       round_trip_distance = distance * 2;
       add_location(conn, name, round_trip_distance)
       conn.close()
-      await interaction.response.send_message(f"Location '{name}' with a round-trip distance of {round_trip_distance} miles added/updated. Please enter the one way distance, and the bot will calculate the distance for a round trip.")
+      await interaction.response.send_message(f"Location '{name}' with a round-trip distance of {round_trip_distance} miles added/updated.")
     except Exception as e:
         logger.error(f"Error in /location command: {e}", exc_info=True)
         await interaction.response.send_message("An error occurred while adding or updating the location.")
