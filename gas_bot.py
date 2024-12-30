@@ -5,11 +5,13 @@ from discord.ext import commands
 from discord import app_commands
 import datetime
 import json
+import psycopg2
+from psycopg2 import sql
 
 # --- Configuration ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-
-DATABASE_FILE = "gas_data.json"
+DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_NAME = "railway" # Replace if using a specific database name
 
 # --- Bot Setup ---
 intents = discord.Intents.default()
@@ -23,17 +25,56 @@ DEFAULT_MPG = 20  # Default MPG for all calculations
 # --- Gas Price Data ---
 CURRENT_GAS_PRICE = 3.30  # Default gas price
 
-# --- Data Storage (using a JSON file) ---
-def load_data():
-    try:
-        with open(DATABASE_FILE, "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {"fill_ups": [], "users": {}, "payments": [], "current_gas_price": CURRENT_GAS_PRICE}
+# --- Database Functions ---
+def get_db_connection():
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn
 
-def save_data(data):
-    with open(DATABASE_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+def get_or_create_user(conn, user_id, user_name):
+  cur = conn.cursor()
+  cur.execute("SELECT name, total_owed FROM users WHERE id = %s", (user_id,))
+  user = cur.fetchone()
+  if user is None:
+    cur.execute("INSERT INTO users (id, name, total_owed) VALUES (%s, %s, %s)", (user_id, user_name, 0))
+    conn.commit()
+    return {"name": user_name, "total_owed": 0}
+  else:
+    return {"name": user[0], "total_owed": user[1]}
+
+def save_user_data(conn, user_id, user_name, total_owed, distance_costs):
+  cur = conn.cursor()
+  cur.execute("UPDATE users SET name=%s, total_owed=%s WHERE id=%s", (user_name, total_owed, user_id))
+  cur.execute("DELETE FROM distance_costs WHERE user_id = %s", (user_id,))
+  for distance_cost in distance_costs:
+    cur.execute("INSERT INTO distance_costs (user_id, distance, cost) VALUES (%s, %s, %s)", (user_id, distance_cost["distance"], distance_cost["cost"]))
+  conn.commit()
+
+def get_all_users(conn):
+  cur = conn.cursor()
+  cur.execute("SELECT id, name, total_owed FROM users")
+  users = {}
+  for user in cur.fetchall():
+    cur.execute("SELECT distance, cost FROM distance_costs WHERE user_id = %s", (user[0],))
+    distance_costs = [{"distance": row[0], "cost": row[1]} for row in cur.fetchall()]
+    users[user[0]] = {"name": user[1], "total_owed": user[2], "distance_costs": distance_costs}
+  return users
+
+def add_payment(conn, payer_id, payer_name, amount):
+    cur = conn.cursor()
+    cur.execute("INSERT INTO payments (timestamp, payer_id, payer_name, amount) VALUES (%s, %s, %s, %s)", (datetime.datetime.now().isoformat(), payer_id, payer_name, amount))
+    conn.commit()
+
+
+def set_current_gas_price(conn, price_per_gallon):
+    cur = conn.cursor()
+    cur.execute("INSERT INTO gas_prices (price) VALUES (%s) ", (price_per_gallon,))
+    conn.commit()
+
+def get_current_gas_price(conn):
+    cur = conn.cursor()
+    cur.execute("SELECT price FROM gas_prices ORDER BY id DESC LIMIT 1")
+    price = cur.fetchone()
+    return price[0] if price else CURRENT_GAS_PRICE
 
 # --- Helper Functions ---
 def calculate_cost(distance, mpg, price_per_gallon):
@@ -54,113 +95,78 @@ async def on_ready():
 @app_commands.describe(price_per_gallon="Price per gallon")
 async def filled(interaction: discord.Interaction, price_per_gallon: float):
     """Updates the current gas price."""
-    data = load_data()
-    data["current_gas_price"] = price_per_gallon
-    save_data(data)
+    conn = get_db_connection()
+    set_current_gas_price(conn, price_per_gallon)
+    conn.close()
     await interaction.response.send_message(f"Current gas price updated to ${price_per_gallon:.2f}")
 
 @client.tree.command(name="drove")
 @app_commands.describe(distance="Distance driven in miles")
-@app_commands.checks.cooldown(1, 5.0, key=lambda i: (i.guild_id, i.user.id)) # Cooldown per user per guild
 async def drove(interaction: discord.Interaction, distance: float):
     """Logs miles driven and calculates cost using the current gas price."""
-    data = load_data()
+    conn = get_db_connection()
     user_id = str(interaction.user.id)
     user_name = interaction.user.name
-
-    if user_id not in data["users"]:
-        data["users"][user_id] = {"name": user_name, "total_owed": 0}
-    else:
-        data["users"][user_id]["name"] = user_name
-
-    # Calculate cost using current gas price and default MPG
-    current_price = data.get("current_gas_price", CURRENT_GAS_PRICE)
+    user = get_or_create_user(conn, user_id, user_name)
+    current_price = get_current_gas_price(conn)
     cost = calculate_cost(distance, DEFAULT_MPG, current_price)
-
-    # Update the user's total owed amount
-    data["users"][user_id]["total_owed"] += cost
-
-    # save the gas amount owed for the distance in a new key
-    if 'distance_costs' not in data["users"][user_id]:
-        data["users"][user_id]["distance_costs"] = []
-    data["users"][user_id]["distance_costs"].append({
-        "distance" : distance,
-        "cost" : cost
-    })
-
-    save_data(data)
+    total_owed = user["total_owed"] + cost
+    distance_costs = user.get("distance_costs", [])
+    distance_costs.append({"distance": distance, "cost": cost})
+    save_user_data(conn, user_id, user_name, total_owed, distance_costs)
+    conn.close()
     await interaction.response.send_message(f"Recorded {distance} miles driven. Current cost: ${cost:.2f}")
 
 @client.tree.command(name="balance")
 async def balance(interaction: discord.Interaction):
     """Shows how much each user owes."""
-    data = load_data()
+    conn = get_db_connection()
     user_id = str(interaction.user.id)
     user_name = interaction.user.name
-
-    if user_id in data["users"]:
-        data["users"][user_id]["name"] = user_name
-        total_owed = data["users"][user_id]["total_owed"]
-        await interaction.response.send_message(f"Your current balance: ${total_owed:.2f}")
-    else:
-        await interaction.response.send_message("You have no recorded expenses.")
+    user = get_or_create_user(conn, user_id, user_name)
+    conn.close()
+    await interaction.response.send_message(f"Your current balance: ${user['total_owed']:.2f}")
 
 @client.tree.command(name="allbalances")
 async def allbalances(interaction: discord.Interaction):
     """Shows the balances of all users."""
-    data = load_data()
+    conn = get_db_connection()
+    users = get_all_users(conn)
+    conn.close()
     message = "Current Balances:\n"
-    for user_id, user_data in data["users"].items():
-        # Fetch the member object to get the updated name
+    for user_id, user_data in users.items():
         member = interaction.guild.get_member(int(user_id))
         if member:
             user_name = member.name
         else:
-            user_name = user_data.get("name", "Unknown User")  # Fallback to stored name or "Unknown User"
-
-        # Update the user's name in the database
-        user_data["name"] = user_name
-
+            user_name = user_data.get("name", "Unknown User")
         message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
-    save_data(data)
     await interaction.response.send_message(message)
 
 @client.tree.command(name="settle")
 async def settle(interaction: discord.Interaction):
     """Resets your balance to zero."""
-    data = load_data()
+    conn = get_db_connection()
     user_id = str(interaction.user.id)
-
-    if user_id in data["users"]:
-        data["users"][user_id]["total_owed"] = 0
-        save_data(data)
-        await interaction.response.send_message("Your balance has been settled.")
-    else:
-        await interaction.response.send_message("You have no balance to settle.")
+    user_name = interaction.user.name
+    user = get_or_create_user(conn, user_id, user_name)
+    save_user_data(conn, user_id, user_name, 0, [])
+    conn.close()
+    await interaction.response.send_message("Your balance has been settled.")
 
 @client.tree.command(name="paid")
 @app_commands.describe(amount="Amount paid")
 async def paid(interaction: discord.Interaction, amount: float):
     """Records a payment made by a user."""
-    data = load_data()
+    conn = get_db_connection()
     payer_id = str(interaction.user.id)
     user_name = interaction.user.name
-
-    if payer_id not in data["users"]:
-        data["users"][payer_id] = {"name": user_name, "total_owed": 0}
-
-    # Allow balance to go negative (remove the check)
-    data["users"][payer_id]["total_owed"] -= amount
-
-    data["payments"].append({
-        "timestamp": datetime.datetime.now().isoformat(),
-        "payer_id": payer_id,
-        "payer_name": user_name,
-        "amount": amount
-    })
-
-    save_data(data)
-    await interaction.response.send_message(f"Payment of ${amount:.2f} recorded. Your new balance is ${data['users'][payer_id]['total_owed']:.2f}")
+    user = get_or_create_user(conn, payer_id, user_name)
+    total_owed = user["total_owed"] - amount
+    save_user_data(conn, payer_id, user_name, total_owed, user.get("distance_costs", []))
+    add_payment(conn, payer_id, user_name, amount)
+    conn.close()
+    await interaction.response.send_message(f"Payment of ${amount:.2f} recorded. Your new balance is ${total_owed:.2f}")
 
 @client.tree.command(name="help")
 async def help(interaction: discord.Interaction):
