@@ -13,14 +13,7 @@ import logging
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 DATABASE_NAME = "railway" # Replace if using a specific database name
-try:
-    conn = psycopg2.connect(DATABASE_URL)
-    print("Connection successful")
-    conn.close()
-except Exception as e:
-    print("Connection failed:")
-    print(e)
-    
+
 # --- Bot Setup ---
 intents = discord.Intents.default()
 intents.message_content = True
@@ -87,6 +80,23 @@ def get_current_gas_price(conn):
     price = cur.fetchone()
     return price[0] if price else CURRENT_GAS_PRICE
 
+def add_location(conn, name, distance):
+    cur = conn.cursor()
+    cur.execute("INSERT INTO locations (name, distance) VALUES (%s, %s) ON CONFLICT (name) DO UPDATE SET distance=%s", (name, distance, distance))
+    conn.commit()
+
+def get_locations(conn):
+    cur = conn.cursor()
+    cur.execute("SELECT name, distance FROM locations")
+    locations = cur.fetchall()
+    return locations
+
+def get_location_distance(conn, name):
+  cur = conn.cursor()
+  cur.execute("SELECT distance FROM locations WHERE name = %s", (name,))
+  location = cur.fetchone()
+  return location[0] if location else None
+
 # --- Helper Functions ---
 def calculate_cost(distance, mpg, price_per_gallon):
     gallons_used = distance / mpg
@@ -105,35 +115,72 @@ async def on_ready():
 @client.tree.command(name="filled")
 @app_commands.describe(price_per_gallon="Price per gallon")
 async def filled(interaction: discord.Interaction, price_per_gallon: float):
-  try:
+    """Updates the current gas price."""
+    try:
         conn = get_db_connection()
         set_current_gas_price(conn, price_per_gallon)
         conn.close()
         await interaction.response.send_message(f"Current gas price updated to ${price_per_gallon:.2f}")
-  except Exception as e:
-      logger.error(f"Error in /filled command: {e}", exc_info=True)
-      await interaction.response.send_message("An error occurred while updating the gas price.")
+    except Exception as e:
+        logger.error(f"Error in /filled command: {e}", exc_info=True)
+        await interaction.response.send_message("An error occurred while updating the gas price.")
 
+@client.tree.command(name="location")
+@app_commands.describe(name="Name of location", distance="Distance to location")
+async def location(interaction: discord.Interaction, name: str, distance: float):
+    """Adds or updates a common location and its round-trip distance."""
+    try:
+      conn = get_db_connection()
+      add_location(conn, name, distance)
+      conn.close()
+      await interaction.response.send_message(f"Location '{name}' with a round-trip distance of {distance} miles added/updated.")
+    except Exception as e:
+        logger.error(f"Error in /location command: {e}", exc_info=True)
+        await interaction.response.send_message("An error occurred while adding or updating the location.")
 
 @client.tree.command(name="drove")
-@app_commands.describe(distance="Distance driven in miles")
-async def drove(interaction: discord.Interaction, distance: float):
-  try:
+@app_commands.describe(distance="Distance driven in miles or a common location name", location="Select a location if needed, otherwise enter distance.")
+async def drove(interaction: discord.Interaction, distance: str = None, location: str = None):
+    """Logs miles driven and calculates cost using the current gas price."""
+    try:
         conn = get_db_connection()
         user_id = str(interaction.user.id)
         user_name = interaction.user.name
         user = get_or_create_user(conn, user_id, user_name)
         current_price = get_current_gas_price(conn)
-        cost = calculate_cost(distance, DEFAULT_MPG, current_price)
-        total_owed = user["total_owed"] + cost
-        distance_costs = user.get("distance_costs", [])
-        distance_costs.append({"distance": distance, "cost": cost})
-        save_user_data(conn, user_id, user_name, total_owed, distance_costs)
-        conn.close()
-        await interaction.response.send_message(f"Recorded {distance} miles driven. Current cost: ${cost:.2f}")
-  except Exception as e:
-      logger.error(f"Error in /drove command: {e}", exc_info=True)
-      await interaction.response.send_message("An error occurred while recording the distance driven.")
+        if location is not None:
+          distance_from_location = get_location_distance(conn, location)
+          if distance_from_location is not None:
+            cost = calculate_cost(distance_from_location, DEFAULT_MPG, current_price)
+            total_owed = user["total_owed"] + cost
+            distance_costs = user.get("distance_costs", [])
+            distance_costs.append({"distance": distance_from_location, "cost": cost})
+            save_user_data(conn, user_id, user_name, total_owed, distance_costs)
+            conn.close()
+            await interaction.response.send_message(f"Recorded {location} as distance driven. Current cost: ${cost:.2f}")
+          else:
+             conn.close()
+             await interaction.response.send_message(f"The location: {location} was not recognised. Please specify a distance")
+        elif distance is not None:
+          try:
+            distance_float = float(distance)
+            cost = calculate_cost(distance_float, DEFAULT_MPG, current_price)
+            total_owed = user["total_owed"] + cost
+            distance_costs = user.get("distance_costs", [])
+            distance_costs.append({"distance": distance_float, "cost": cost})
+            save_user_data(conn, user_id, user_name, total_owed, distance_costs)
+            conn.close()
+            await interaction.response.send_message(f"Recorded {distance} miles driven. Current cost: ${cost:.2f}")
+          except ValueError:
+             conn.close()
+             await interaction.response.send_message(f"The value {distance} is not recognised as a location, or a valid milage. Please specify a valid milage or location.")
+        else:
+           conn.close()
+           await interaction.response.send_message(f"Please specify a distance or location.")
+
+    except Exception as e:
+        logger.error(f"Error in /drove command: {e}", exc_info=True)
+        await interaction.response.send_message("An error occurred while recording the distance driven.")
 
 
 @client.tree.command(name="balance")
@@ -150,10 +197,10 @@ async def balance(interaction: discord.Interaction):
         logger.error(f"Error in /balance command: {e}", exc_info=True)
         await interaction.response.send_message("An error occurred while retrieving your balance.")
 
-
 @client.tree.command(name="allbalances")
 async def allbalances(interaction: discord.Interaction):
-  try:
+    """Shows the balances of all users."""
+    try:
         conn = get_db_connection()
         users = get_all_users(conn)
         conn.close()
@@ -166,14 +213,14 @@ async def allbalances(interaction: discord.Interaction):
                 user_name = user_data.get("name", "Unknown User")
             message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
         await interaction.response.send_message(message)
-  except Exception as e:
-    logger.error(f"Error in /allbalances command: {e}", exc_info=True)
-    await interaction.response.send_message("An error occurred while displaying balances.")
-
+    except Exception as e:
+        logger.error(f"Error in /allbalances command: {e}", exc_info=True)
+        await interaction.response.send_message("An error occurred while displaying balances.")
 
 @client.tree.command(name="settle")
 async def settle(interaction: discord.Interaction):
-  try:
+    """Resets your balance to zero."""
+    try:
         conn = get_db_connection()
         user_id = str(interaction.user.id)
         user_name = interaction.user.name
@@ -181,26 +228,32 @@ async def settle(interaction: discord.Interaction):
         save_user_data(conn, user_id, user_name, 0, [])
         conn.close()
         await interaction.response.send_message("Your balance has been settled.")
-  except Exception as e:
+    except Exception as e:
         logger.error(f"Error in /settle command: {e}", exc_info=True)
         await interaction.response.send_message("An error occurred while settling your balance.")
 
 @client.tree.command(name="paid")
-@app_commands.describe(amount="Amount paid")
-async def paid(interaction: discord.Interaction, amount: float):
-  try:
+@app_commands.describe(amount="Amount paid", user="User to pay for, leave blank for yourself")
+async def paid(interaction: discord.Interaction, amount: float, user: discord.Member = None):
+    """Records a payment made by a user, or for a user."""
+    try:
         conn = get_db_connection()
-        payer_id = str(interaction.user.id)
-        user_name = interaction.user.name
+        if user is None:
+           payer_id = str(interaction.user.id)
+           user_name = interaction.user.name
+        else:
+           payer_id = str(user.id)
+           user_name = user.name
+
         user = get_or_create_user(conn, payer_id, user_name)
         total_owed = user["total_owed"] - amount
         save_user_data(conn, payer_id, user_name, total_owed, user.get("distance_costs", []))
         add_payment(conn, payer_id, user_name, amount)
         conn.close()
-        await interaction.response.send_message(f"Payment of ${amount:.2f} recorded. Your new balance is ${total_owed:.2f}")
-  except Exception as e:
+        await interaction.response.send_message(f"Payment of ${amount:.2f} recorded for {user_name}. New balance is ${total_owed:.2f}")
+    except Exception as e:
        logger.error(f"Error in /paid command: {e}", exc_info=True)
-       await interaction.response.send_message("An error occurred while recording your payment.")
+       await interaction.response.send_message("An error occurred while recording the payment.")
 
 @client.tree.command(name="help")
 async def help(interaction: discord.Interaction):
@@ -214,12 +267,17 @@ This bot helps track gas expenses and calculate how much each user owes.
 
 *   `/filled` **price_per_gallon**:  Updates the current gas price.
     *   **price_per_gallon:** The new price per gallon.
-*   `/drove` **distance**: Records the miles driven by a user.
-    *   **distance:** The distance driven in miles.
+*   `/location` **name** **distance**: Adds a common location and distance for that location.
+    *   **name:** The name of the location.
+    *   **distance**: the distance to that location.
+*   `/drove` **distance or location**: Records the miles driven by a user.
+    *  **distance**: The distance driven in miles.
+   *   **location**: A location previously set by the `/location` command.
 *   `/balance`: Shows your current balance (how much you owe or are owed).
 *   `/allbalances`: Shows the balances of all users.
 *   `/paid` **amount**: Records a payment you made towards your balance.
     *   **amount:** The amount paid.
+    *   **user:** If specified, sets the amount for another user.
 *   `/settle`: Resets your balance to zero (use this after you've paid in full).
 *   `/help`: Displays this help message.
 
@@ -227,10 +285,14 @@ This bot helps track gas expenses and calculate how much each user owes.
 
 1. **Update Gas Price:**
     `/filled 3.50` (Updates the gas price to $3.50/gallon)
-2. **Driving:**
-    `/drove 50` (Records 50 miles driven)
-3. **Payment:**
+2. **Location:**
+    `/location Home 50`
+3. **Driving:**
+     `/drove 50` (Records 50 miles driven)
+     `/drove Home` (Records a drive to the location "Home")
+4. **Payment:**
     `/paid 20` (Records a payment of $20)
+    `/paid 20 @OtherUser` (Records a payment of $20 for other user)
 4. **Check Balance:**
     `/balance` (Shows your current balance)
 
