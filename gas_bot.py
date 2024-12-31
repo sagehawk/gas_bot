@@ -13,7 +13,7 @@ import logging
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 DATABASE_NAME = "railway" # Replace if using a specific database name
-TARGET_CHANNEL_ID = 1319440273868062861
+TARGET_CHANNEL_ID = 1320966290642571314
 
 # --- Bot Setup ---
 intents = discord.Intents.default()
@@ -128,7 +128,7 @@ async def drove(interaction: discord.Interaction, distance: str):
            distance_costs.append({"distance": distance_float, "cost": cost})
            save_user_data(conn, user_id, user_name, total_owed, distance_costs)
            conn.close()
-           last_drive_message =  f"{user_name}: Recorded {distance} miles driven. Current cost: ${cost:.2f}\n"
+           last_drive_message =  f"**{user_name}**: Recorded {distance} miles driven. Current cost: ${cost:.2f}\n\n"
         except ValueError:
             conn.close()
             await interaction.response.send_message(f"The value {distance} is not a valid number. Please specify a valid milage.")
@@ -141,6 +141,7 @@ async def drove(interaction: discord.Interaction, distance: str):
         users = get_all_users(conn)
         conn.close()
         message = f"{last_drive_message}Current Balances:\n"
+        message += "```\n"
         for user_id, user_data in users.items():
             member = interaction.guild.get_member(int(user_id))
             if member:
@@ -148,7 +149,7 @@ async def drove(interaction: discord.Interaction, distance: str):
             else:
               user_name = user_data.get("name", "Unknown User")
             message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
-        
+        message += "```"
         await interaction.response.send_message(message)
         
     except Exception as e:
