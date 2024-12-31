@@ -13,7 +13,7 @@ import logging
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 DATABASE_NAME = "railway" # Replace if using a specific database name
-TARGET_CHANNEL_ID = 1320966290642571314
+TARGET_CHANNEL_ID = 1319440273868062861
 
 # --- Bot Setup ---
 intents = discord.Intents.default()
