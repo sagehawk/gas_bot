@@ -13,6 +13,7 @@ import logging
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 DATABASE_NAME = "railway" # Replace if using a specific database name
+TARGET_CHANNEL_ID = 1320966290642571314
 
 # --- Bot Setup ---
 intents = discord.Intents.default()
@@ -21,7 +22,7 @@ intents.members = True
 client = commands.Bot(command_prefix="/", intents=intents)
 
 # --- Logging Setup ---
-logging.basicConfig(level=logging.ERROR) # Set level for logging
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 # --- MPG Data ---
@@ -112,7 +113,7 @@ async def filled(interaction: discord.Interaction, price_per_gallon: float):
 @client.tree.command(name="drove")
 @app_commands.describe(distance="Distance driven in miles")
 async def drove(interaction: discord.Interaction, distance: str):
-    """Logs miles driven and calculates cost using the current gas price."""
+    """Logs miles driven and calculates cost using the current gas price, deletes all messages then provides the balance"""
     try:
         conn = get_db_connection()
         user_id = str(interaction.user.id)
@@ -127,10 +128,29 @@ async def drove(interaction: discord.Interaction, distance: str):
            distance_costs.append({"distance": distance_float, "cost": cost})
            save_user_data(conn, user_id, user_name, total_owed, distance_costs)
            conn.close()
-           await interaction.response.send_message(f"Recorded {distance} miles driven. Current cost: ${cost:.2f}")
+           last_drive_message =  f"{user_name}: Recorded {distance} miles driven. Current cost: ${cost:.2f}\n"
         except ValueError:
-             conn.close()
-             await interaction.response.send_message(f"The value {distance} is not a valid number. Please specify a valid milage.")
+            conn.close()
+            await interaction.response.send_message(f"The value {distance} is not a valid number. Please specify a valid milage.")
+            return
+        
+        if interaction.channel.id == TARGET_CHANNEL_ID:
+           await interaction.channel.purge(limit=None)
+        
+        conn = get_db_connection()
+        users = get_all_users(conn)
+        conn.close()
+        message = f"{last_drive_message}Current Balances:\n"
+        for user_id, user_data in users.items():
+            member = interaction.guild.get_member(int(user_id))
+            if member:
+               user_name = member.name
+            else:
+              user_name = user_data.get("name", "Unknown User")
+            message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
+        
+        await interaction.response.send_message(message)
+        
     except Exception as e:
         logger.error(f"Error in /drove command: {e}", exc_info=True)
         await interaction.response.send_message("An error occurred while recording the distance driven.")
@@ -221,7 +241,7 @@ This bot helps track gas expenses and calculate how much each user owes.
 *   `/filled` **price_per_gallon**:  Updates the current gas price.
     *   **price_per_gallon:** The new price per gallon.
 *   `/drove` **distance**: Records the miles driven by a user.
-    *  **distance**: The distance driven in miles.
+    *   **distance**: The distance driven in miles.
 *   `/balance`: Shows your current balance (how much you owe or are owed).
 *   `/allbalances`: Shows the balances of all users.
 *   `/paid` **amount**: Records a payment you made towards your balance.
