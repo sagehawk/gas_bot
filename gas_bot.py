@@ -1,219 +1,3 @@
-import os
-import asyncio
-import discord
-from discord.ext import commands
-from discord import app_commands
-import datetime
-import json
-import psycopg2
-from psycopg2 import sql
-import logging
-
-# --- Configuration ---
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-DATABASE_URL = os.environ.get("DATABASE_URL")
-DATABASE_NAME = "railway" # Replace if using a specific database name
-TARGET_CHANNEL_ID = 1319440273868062861
-
-# --- Bot Setup ---
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
-client = commands.Bot(command_prefix="/", intents=intents)
-
-# --- Logging Setup ---
-logging.basicConfig(level=logging.ERROR)
-logger = logging.getLogger(__name__)
-
-# --- Car Data ---
-CARS = [
-    {"name": "Yellow Subaru", "mpg": 20},
-    {"name": "Black Subaru", "mpg": 20},
-    {"name": "Grey Subaru", "mpg": 20},
-    {"name": "Toyota", "mpg": 25}
-]
-
-# --- Helper Functions ---
-def calculate_cost(distance, mpg, price_per_gallon):
-    gallons_used = distance / mpg
-    return gallons_used * price_per_gallon
-
-def format_activity_log(records):
-    log_message = ""
-    for record in records:
-        record_type = record[0]
-        user_name = record[1]
-        activity_detail = record[2]
-        date = record[3]
-        log_message += f"{user_name} {record_type} {activity_detail} on {date}\n"
-    return log_message
-
-def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_activities, last_10_activities_all_cars, interaction):
-    message = ""
-    if near_empty_cars:
-        message += "**Cars Near Empty:**\n"
-        message += "\n".join(near_empty_cars) + "\n\n"
-
-    message += "**Current Amounts Owed:**\n"
-    message += "```\n"
-    for user_id, user_data in users_with_miles.items():
-        member = interaction.guild.get_member(int(user_id))
-        if member:
-            user_name = member.name
-        else:
-            user_name = user_data.get("name", "Unknown User")
-        message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
-    message += "```\n"
-
-    message += "**Total Miles Driven by User:**\n"
-    message += "```\n"
-    for user_id, user_data in users_with_miles.items():
-        member = interaction.guild.get_member(int(user_id))
-        if member:
-            user_name = member.name
-        else:
-            user_name = user_data.get("name", "Unknown User")
-        message += f"{user_name}: {user_data['total_miles']:.2f} miles\n"
-    message += "```\n"
-
-    message += "**Last 10 Recordings (Drives & Fills):**\n"
-    message += last_10_combined_activities + "\n"
-
-    message += "**Last 10 Activities per Car:**\n"
-    for car_name, activities in last_10_activities_all_cars.items():
-        message += f"**{car_name}**:\n{activities}\n"
-    return message
-
-
-# --- Database Functions ---
-def get_db_connection():
-    conn = psycopg2.connect(DATABASE_URL)
-    return conn
-
-def initialize_cars_in_db(conn):
-    cur = conn.cursor()
-    for car in CARS:
-        cur.execute("INSERT INTO cars (name, mpg) VALUES (%s, %s) ON CONFLICT (name) DO NOTHING", (car["name"], car["mpg"]))
-    conn.commit()
-
-def get_car_id_from_name(conn, car_name):
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM cars WHERE name = %s", (car_name,))
-    car_data = cur.fetchone()
-    if car_data:
-        return car_data[0]
-    return None
-
-def get_car_name_from_id(conn, car_id):
-    cur = conn.cursor()
-    cur.execute("SELECT name FROM cars WHERE id = %s", (car_id,))
-    car_data = cur.fetchone()
-    if car_data:
-        return car_data[0]
-    return None
-
-def get_or_create_user(conn, user_id, user_name):
-  cur = conn.cursor()
-  cur.execute("SELECT name, total_owed FROM users WHERE id = %s", (user_id,))
-  user = cur.fetchone()
-  if user is None:
-    cur.execute("INSERT INTO users (id, name, total_owed) VALUES (%s, %s, %s)", (user_id, user_name, 0))
-    conn.commit()
-    return {"name": user_name, "total_owed": 0}
-  else:
-    return {"name": user[0], "total_owed": user[1]}
-
-def save_user_data(conn, user_id, user_name, total_owed):
-  cur = conn.cursor()
-  cur.execute("UPDATE users SET name=%s, total_owed=%s WHERE id=%s", (user_name, total_owed, user_id))
-  conn.commit()
-
-def get_all_users_with_miles(conn):
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM get_all_users_with_miles_func()")
-    users_data = {}
-    for row in cur.fetchall():
-        users_data[row[0]] = {"name": row[1], "total_owed": row[2], "total_miles": row[3]}
-    return users_data
-
-def add_payment(conn, payer_id, payer_name, amount): # No longer directly used, payment handled in fill
-    cur = conn.cursor()
-    timestamp_iso = datetime.datetime.now().isoformat()
-    cur.execute("INSERT INTO payments (timestamp, payer_id, payer_name, amount) VALUES (%s, %s, %s, %s)", (timestamp_iso, payer_id, payer_name, amount))
-    conn.commit()
-
-def set_current_gas_price(conn, price_per_gallon): # Still setting global gas price
-    cur = conn.cursor()
-    cur.execute("INSERT INTO gas_prices (price) VALUES (%s) ", (price_per_gallon,))
-    conn.commit()
-
-def get_current_gas_price(conn):
-    cur = conn.cursor()
-    cur.execute("SELECT price FROM gas_prices ORDER BY id DESC LIMIT 1")
-    price = cur.fetchone()
-    return price[0] if price else 3.30 # Use default from config if no price in DB
-
-def record_drive(conn, user_id, user_name, car_name, distance, cost, near_empty):
-    cur = conn.cursor()
-    cur.callproc('record_drive_func', (user_id, user_name, car_name, distance, cost, near_empty))
-    conn.commit()
-
-def record_fill(conn, user_id, user_name, car_name, amount, price_per_gallon, payment_amount):
-    cur = conn.cursor()
-    cur.callproc('record_fill_func', (user_id, user_name, car_name, amount, price_per_gallon, payment_amount))
-    conn.commit()
-
-def get_user_drive_history(conn, user_id, limit=10):
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM get_user_drive_history_func(%s, %s)", (user_id, limit))
-    return cur.fetchall()
-
-def get_user_fill_history(conn, user_id, limit=10):
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM get_user_fill_history_func(%s, %s)", (user_id, limit))
-    return cur.fetchall()
-
-def get_car_drive_history(conn, car_id, limit=10):
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM get_car_drive_history_func(%s, %s)", (car_id, limit))
-    return cur.fetchall()
-
-def get_car_fill_history(conn, car_id, limit=10):
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM get_car_fill_history_func(%s, %s)", (car_id, limit))
-    return cur.fetchall()
-
-def get_total_miles_driven_by_user(conn, user_id): # Replaced by function in get_all_users_with_miles
-    cur = conn.cursor()
-    cur.execute("SELECT SUM(distance) FROM drives WHERE user_id = %s", (user_id,))
-    total_miles = cur.fetchone()[0]
-    return total_miles if total_miles else 0
-
-def get_last_10_activities_for_all_cars(conn):
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM get_last_10_activities_for_all_cars_func()")
-    activities_data = {}
-    for row in cur.fetchall():
-        activities_data[row[0]] = row[1] # car name, activity log string
-    return activities_data
-
-def get_last_10_combined_activities_new(conn):
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM get_last_10_combined_activities_func()")
-    result = cur.fetchone()
-    if result:
-       return result[0]
-    else:
-       return ""
-
-def get_near_empty_cars(conn):
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM get_near_empty_cars()")
-    cars = [row[0] for row in cur.fetchall()]
-    return cars
-
-
-# --- Bot Commands ---
 class CarDropdown(discord.ui.Select):
     def __init__(self, cars):
         options = [discord.SelectOption(label=car["name"], value=car["name"]) for car in cars]
@@ -241,7 +25,7 @@ class CarDropdown(discord.ui.Select):
                save_user_data(conn, user_id, user_name, total_owed)
                record_drive(conn, user_id, user_name, car_name, distance_float, cost, self.view.near_empty)
                conn.close()
-               last_drive_message =  f"**{user_name}**: Recorded {distance} miles driven in {car_name}. Current cost: ${cost:.2f}. {'(Near Empty)' if self.view.near_empty else ''}\n\n"
+               last_drive_message =  f"**{user_name}**: Recorded {self.view.distance} miles driven in {car_name}. Current cost: ${cost:.2f}. {'(Near Empty)' if self.view.near_empty else ''}\n\n"
             except ValueError:
                 conn.close()
                 await interaction.followup.send(f"The distance value is not a valid number.", ephemeral=True) # Use follow-up here as initial response was deferred
@@ -261,6 +45,43 @@ class CarDropdown(discord.ui.Select):
             message += format_balance_message(users_with_miles, near_empty_cars, last_10_combined_activities, last_10_activities_all_cars, interaction)
 
             await interaction.response.edit_message(content=message, view=None) # Edit the ephemeral message to show results and remove view
+        elif isinstance(self.view, FillView):
+            try:
+                conn = get_db_connection()
+                user_id = str(interaction.user.id)
+                user_name = interaction.user.name
+                user = get_or_create_user(conn, user_id, user_name)
+                car_name = self.view.selected_car
+                price_per_gallon = self.view.price_per_gallon
+                payment_amount = self.view.payment_amount
+
+                record_fill(conn, user_id, user_name, car_name, 10, price_per_gallon, payment_amount) # Assume 10 gallons, adjust as needed. Payment recorded.
+                set_current_gas_price(conn, price_per_gallon) #Still setting global gas price for now
+
+                total_owed = user["total_owed"] - payment_amount # Reduce total owed by payment amount
+                save_user_data(conn, user_id, user_name, total_owed)
+
+                conn.close()
+
+                if interaction.channel.id == TARGET_CHANNEL_ID:
+                   await interaction.channel.purge(limit=None)
+
+                conn = get_db_connection()
+                users_with_miles = get_all_users_with_miles(conn)
+                near_empty_cars = get_near_empty_cars(conn)
+                last_10_activities_all_cars = get_last_10_activities_for_all_cars(conn)
+                last_10_combined_activities = get_last_10_combined_activities_new(conn)
+                conn.close()
+
+                message = "Gas fill-up recorded.\n\n"
+                message += format_balance_message(users_with_miles, near_empty_cars, last_10_combined_activities, last_10_activities_all_cars, interaction)
+
+                await interaction.response.edit_message(content=message, view=None) # Edit the ephemeral message to show results and remove view
+
+            except Exception as e:
+                logger.error(f"Error in /filled command: {e}", exc_info=True)
+                await interaction.followup.send("An error occurred while recording the gas fill-up.", ephemeral=True) # Send error as followup
+
 
 class DroveView(discord.ui.View):
     def __init__(self, distance, cars):
@@ -291,8 +112,8 @@ class FillView(discord.ui.View):
 
     @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
     async def submit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.selected_car and self.payment_amount is not None and self.price_per_gallon is not None:
-            self.stop()
+      if self.selected_car and self.payment_amount is not None and self.price_per_gallon is not None:
+            self.stop() # Stop listening for interactions
             await interaction.response.defer() # Acknowledge, actual response will be sent later
             self.interaction_ref = interaction # Store interaction for later use
 
@@ -332,7 +153,7 @@ class FillView(discord.ui.View):
                 logger.error(f"Error in /filled command: {e}", exc_info=True)
                 await interaction.followup.send("An error occurred while recording the gas fill-up.", ephemeral=True) # Send error as followup
 
-        else:
+      else:
             await interaction.response.send_message("Please select a car and enter payment amount and price per gallon.", ephemeral=True)
 
 
@@ -355,14 +176,12 @@ async def filled(interaction: discord.Interaction, price_per_gallon: float, paym
     fill_view = FillView(price_per_gallon, payment_amount, CARS)
     await interaction.response.send_message("Which car did you fill up?", view=fill_view, ephemeral=True)
 
-
 @client.tree.command(name="drove")
 @app_commands.describe(distance="Distance driven in miles")
 async def drove(interaction: discord.Interaction, distance: str):
     """Logs miles driven and calculates cost using the current gas price, deletes all messages then provides the balance"""
     view = DroveView(distance, CARS)
     await interaction.response.send_message("Which car did you drive and were you near empty?", view=view, ephemeral=True) # Send ephemeral message to get car selection
-
 
 @client.tree.command(name="balance")
 async def balance(interaction: discord.Interaction):
@@ -503,7 +322,41 @@ This bot helps track gas expenses and calculate how much each user owes.
 If you have any questions, feel free to ask!
 """
     await interaction.response.send_message(help_message, ephemeral=True) #Ephemeral help message
+def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_activities, last_10_activities_all_cars, interaction):
+    message = ""
+    if near_empty_cars:
+        message += "**Cars Near Empty:**\n"
+        message += "\n".join(near_empty_cars) + "\n\n"
 
+    message += "**Current Amounts Owed:**\n"
+    message += "```\n"
+    for user_id, user_data in users_with_miles.items():
+        member = interaction.guild.get_member(int(user_id))
+        if member:
+            user_name = member.name
+        else:
+            user_name = user_data.get("name", "Unknown User")
+        message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
+    message += "```\n"
+
+    message += "**Total Miles Driven by User:**\n"
+    message += "```\n"
+    for user_id, user_data in users_with_miles.items():
+        member = interaction.guild.get_member(int(user_id))
+        if member:
+            user_name = member.name
+        else:
+            user_name = user_data.get("name", "Unknown User")
+        message += f"{user_name}: {user_data['total_miles']:.2f} miles\n"
+    message += "```\n"
+
+    message += "**Last 10 Recordings (Drives & Fills):**\n"
+    message += last_10_combined_activities + "\n"
+
+    message += "**Last 10 Activities per Car:**\n"
+    for car_name, activities in last_10_activities_all_cars.items():
+        message += f"**{car_name}**:\n{activities}\n"
+    return message
 
 # --- Function to start the bot ---
 async def main():
