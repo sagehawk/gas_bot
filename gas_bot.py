@@ -215,24 +215,20 @@ def get_near_empty_cars(conn):
 
 # --- Bot Commands ---
 class CarDropdown(discord.ui.Select):
-    def __init__(self, cars):
-        options = [discord.SelectOption(label=car["name"], value=car["name"]) for car in cars]
-        super().__init__(placeholder="Choose a car...", min_values=1, max_values=1, options=options)
-
     async def callback(self, interaction: discord.Interaction):
         self.view.selected_car = self.values[0]
         self.view.interaction_ref = interaction  # Store interaction for later use
 
-        conn = get_db_connection()
-        user_id = str(interaction.user.id)
-        user_name = interaction.user.name
-        user = get_or_create_user(conn, user_id, user_name)
-        current_price = get_current_gas_price(conn)
-
-        car_name = self.view.selected_car
-        car_data = next((car for car in CARS if car["name"] == self.view.selected_car), None)
-
         if isinstance(self.view, DroveView): # Handle DroveView specific logic
+            conn = get_db_connection()
+            user_id = str(interaction.user.id)
+            user_name = interaction.user.name
+            user = get_or_create_user(conn, user_id, user_name)
+            current_price = get_current_gas_price(conn)
+
+            car_name = self.view.selected_car
+            car_data = next((car for car in CARS if car["name"] == self.view.selected_car), None)
+
             try:
                distance_float = float(self.view.distance) # Get distance from view
                mpg = car_data["mpg"] if car_data else 20
@@ -261,6 +257,61 @@ class CarDropdown(discord.ui.Select):
             message += format_balance_message(users_with_miles, near_empty_cars, last_10_combined_activities, last_10_activities_all_cars, interaction)
 
             await interaction.response.edit_message(content=message, view=None) # Edit the ephemeral message to show results and remove view
+
+class FillView(discord.ui.View):
+    def __init__(self, price_per_gallon, payment_amount, cars):
+        super().__init__()
+        self.add_item(CarDropdown(cars))
+        self.selected_car = None
+        self.payment_amount = payment_amount
+        self.price_per_gallon = price_per_gallon
+        self.interaction_ref = None
+
+    @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
+    async def submit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.selected_car and self.payment_amount is not None and self.price_per_gallon is not None:
+            self.stop()
+            await interaction.response.defer() # Acknowledge, actual response will be sent later
+            self.interaction_ref = interaction # Store interaction for later use
+
+            try:
+                conn = get_db_connection()
+                user_id = str(interaction.user.id)
+                user_name = interaction.user.name
+                user = get_or_create_user(conn, user_id, user_name)
+                car_name = self.selected_car
+                price_per_gallon = self.price_per_gallon
+                payment_amount = self.payment_amount
+
+                record_fill(conn, user_id, user_name, car_name, 10, price_per_gallon, payment_amount) # Assume 10 gallons, adjust as needed. Payment recorded.
+                set_current_gas_price(conn, price_per_gallon) #Still setting global gas price for now
+
+                total_owed = user["total_owed"] - payment_amount # Reduce total owed by payment amount
+                save_user_data(conn, user_id, user_name, total_owed)
+
+                conn.close()
+
+                if interaction.channel.id == TARGET_CHANNEL_ID:
+                   await interaction.channel.purge(limit=None)
+
+                conn = get_db_connection()
+                users_with_miles = get_all_users_with_miles(conn)
+                near_empty_cars = get_near_empty_cars(conn)
+                last_10_activities_all_cars = get_last_10_activities_for_all_cars(conn)
+                last_10_combined_activities = get_last_10_combined_activities_new(conn)
+                conn.close()
+
+                message = "Gas fill-up recorded.\n\n"
+                message += format_balance_message(users_with_miles, near_empty_cars, last_10_combined_activities, last_10_activities_all_cars, interaction)
+
+                await interaction.followup.send(message) # Send followup
+
+            except Exception as e:
+                logger.error(f"Error in /filled command: {e}", exc_info=True)
+                await interaction.followup.send("An error occurred while recording the gas fill-up.", ephemeral=True) # Send error as followup
+
+        else:
+            await interaction.response.send_message("Please select a car and enter payment amount and price per gallon.", ephemeral=True)
 
 
 class DroveView(discord.ui.View):
