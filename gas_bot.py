@@ -60,7 +60,7 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
 
     message += "### Current Amounts Owed\n"
     message += "-#  Here are the current balances for each user:\n"
-    message += ">>>\n"
+    message += "```\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
         if member:
@@ -68,11 +68,11 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
         else:
             user_name = user_data.get("name", "Unknown User")
         message += f"**{user_name}**: ${user_data['total_owed']:.2f}\n"
-    message += ">>>\n"
+    message += "```\n"
 
     message += "### Total Miles Driven by User\n"
     message += "-#  Here are the total miles driven by each user:\n"
-    message += ">>>\n"
+    message += "```\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
         if member:
@@ -80,12 +80,12 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
         else:
             user_name = user_data.get("name", "Unknown User")
         message += f"**{user_name}**: {user_data['total_miles']:.2f} miles\n"
-    message += ">>>\n"
+    message += "```\n"
 
     message += "### Last 10 Recordings (Drives & Fills)\n"
     message += "-# Here are the last 10 drive and fill activities:\n"
     if last_10_combined_activities:
-         message += f">>>\n{last_10_combined_activities}\n>>>\n"
+         message += f"```\n{last_10_combined_activities}\n```\n"
     else:
         message += "No recent activity recorded.\n"
     message += "\n"
@@ -95,7 +95,7 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
     for car_name, activities in last_10_activities_all_cars.items():
         message += f"**{car_name}**:\n"
         if activities:
-            message += f">>>\n{activities}\n>>>\n"
+            message += f"```\n{activities}\n```\n"
         else:
              message += "No recent activity recorded.\n"
     return message
@@ -564,7 +564,7 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
 
     message += "### Current Amounts Owed\n"
     message += "-#  Here are the current balances for each user:\n"
-    message += ">>>\n"
+    message += "```\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
         if member:
@@ -572,11 +572,11 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
         else:
             user_name = user_data.get("name", "Unknown User")
         message += f"**{user_name}**: ${user_data['total_owed']:.2f}\n"
-    message += ">>>\n"
+    message += "```\n"
 
     message += "### Total Miles Driven by User\n"
     message += "-#  Here are the total miles driven by each user:\n"
-    message += ">>>\n"
+    message += "```\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
         if member:
@@ -584,12 +584,12 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
         else:
             user_name = user_data.get("name", "Unknown User")
         message += f"**{user_name}**: {user_data['total_miles']:.2f} miles\n"
-    message += ">>>\n"
+    message += "```\n"
 
     message += "### Last 10 Recordings (Drives & Fills)\n"
     message += "-# Here are the last 10 drive and fill activities:\n"
     if last_10_combined_activities:
-         message += f">>>\n{last_10_combined_activities}\n>>>\n"
+         message += f"```\n{last_10_combined_activities}\n```\n"
     else:
         message += "No recent activity recorded.\n"
     message += "\n"
@@ -599,7 +599,7 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
     for car_name, activities in last_10_activities_all_cars.items():
         message += f"**{car_name}**:\n"
         if activities:
-            message += f">>>\n{activities}\n>>>\n"
+            message += f"```\n{activities}\n```\n"
         else:
              message += "No recent activity recorded.\n"
     return message
