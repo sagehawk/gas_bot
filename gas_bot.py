@@ -211,9 +211,13 @@ def get_near_empty_cars(conn):
 
 # --- Bot Commands ---
 class CarDropdown(discord.ui.Select):
+    def __init__(self, cars):
+        options = [discord.SelectOption(label=car["name"], value=car["name"]) for car in cars]
+        super().__init__(placeholder="Choose a car...", min_values=1, max_values=1, options=options)
+
     async def callback(self, interaction: discord.Interaction):
         self.view.selected_car = self.values[0]
-        self.view.interaction_ref = interaction # Store interaction for later use
+        self.view.interaction_ref = interaction  # Store interaction for later use
 
         conn = get_db_connection()
         user_id = str(interaction.user.id)
@@ -256,12 +260,12 @@ class CarDropdown(discord.ui.Select):
 
 
 class DroveView(discord.ui.View):
-    def __init__(self, distance):
+    def __init__(self, distance, cars):
         super().__init__()
-        self.add_item(CarDropdown())
+        self.add_item(CarDropdown(cars))
         self.selected_car = None
-        self.near_empty = False # Initialize near_empty as False
-        self.distance = distance # Add distance to the view to pass it along
+        self.near_empty = False  # Initialize near_empty as False
+        self.distance = distance  # Add distance to the view to pass it along
         self.interaction_ref = None
 
     @discord.ui.button(label="Near Empty", style=discord.ButtonStyle.secondary)
@@ -275,9 +279,9 @@ class DroveView(discord.ui.View):
 
 
 class FillView(discord.ui.View):
-    def __init__(self, price_per_gallon, payment_amount):
+    def __init__(self, price_per_gallon, payment_amount, cars):
         super().__init__()
-        self.add_item(CarDropdown())
+        self.add_item(CarDropdown(cars))
         self.selected_car = None
         self.payment_amount = payment_amount
         self.price_per_gallon = price_per_gallon
@@ -346,7 +350,7 @@ async def on_ready():
 @app_commands.describe(price_per_gallon="Price per gallon", payment_amount="Amount paid for fill")
 async def filled(interaction: discord.Interaction, price_per_gallon: float, payment_amount: float):
     """Records gas fill-up, payment, and updates gas price."""
-    fill_view = FillView(price_per_gallon, payment_amount)
+    fill_view = FillView(price_per_gallon, payment_amount, CARS)
     await interaction.response.send_message("Which car did you fill up?", view=fill_view, ephemeral=True)
 
 
@@ -354,7 +358,7 @@ async def filled(interaction: discord.Interaction, price_per_gallon: float, paym
 @app_commands.describe(distance="Distance driven in miles")
 async def drove(interaction: discord.Interaction, distance: str):
     """Logs miles driven and calculates cost using the current gas price, deletes all messages then provides the balance"""
-    view = DroveView(distance)
+    view = DroveView(distance, CARS)
     await interaction.response.send_message("Which car did you drive and were you near empty?", view=view, ephemeral=True) # Send ephemeral message to get car selection
 
 
