@@ -479,114 +479,6 @@ async def settle(interaction: discord.Interaction):
         logger.error(f"Error in /settle command: {e}", exc_info=True)
         await interaction.followup.send("An error occurred while settling balances.", ephemeral=True)
 
-class CarUsageView(discord.ui.View):
-    def __init__(self, cars):
-        super().__init__()
-        self.add_item(CarDropdown(cars))
-        self.selected_car = None
-        self.interaction_ref = None
-
-    async def on_timeout(self) -> None:
-        for item in self.children:
-            item.disabled = True
-        await self.interaction_ref.edit_message(view=self)
-
-@client.tree.command(name="car_usage")
-@app_commands.describe(car="Car to show usage for")
-async def car_usage(interaction: discord.Interaction, car: str = None):
-    """Shows total miles driven by each user and their last 5 activities."""
-    await interaction.response.defer() # Defer response
-    try:
-        conn = get_db_connection()
-        users_with_miles = get_all_users_with_miles(conn)
-        message = "Car Usage Statistics:\n\n"
-        if car:
-            car_id = get_car_id_from_name(conn, car)
-            if not car_id:
-                conn.close()
-                await interaction.followup.send(f"Car '{car}' not found. Please choose from: {', '.join([c['name'] for c in CARS])}")
-                return
-            message = f"Car Usage Statistics for **{car}**:\n\n"
-            for user_id, user_data in users_with_miles.items():
-                member = interaction.guild.get_member(int(user_id))
-                if member:
-                    user_name = member.name
-                else:
-                    user_name = user_data.get("name", "Unknown User")
-                total_miles = user_data["total_miles"]
-                message += f"{user_name}: Total Miles Driven: {total_miles:.2f} miles\n"
-                last_10_activities = get_car_drive_history(conn, car_id, 5)
-                last_10_activities += get_car_fill_history(conn, car_id, 5)
-                last_10_activities = sorted(last_10_activities, key=lambda x: x[3], reverse=True)[:5]
-                if last_10_activities:
-                    message += "  **Last 5 Activities:**\n" + format_activity_log(last_10_activities)
-                else:
-                    message += "  No recent activity recorded.\n"
-                message += "\n"
-        else:
-            for user_id, user_data in users_with_miles.items():
-                member = interaction.guild.get_member(int(user_id))
-                if member:
-                    user_name = member.name
-                else:
-                    user_name = user_data.get("name", "Unknown User")
-                total_miles = user_data["total_miles"]
-                message += f"**{user_name}**: Total Miles Driven: {total_miles:.2f} miles\n"
-                last_10_activities = get_last_10_activities_for_user(conn, user_id)
-                if last_10_activities:
-                    message += "  **Last 5 Activities:**\n" + last_10_activities[0] # activities are already formatted in SQL function
-                else:
-                    message += "  No recent activity recorded.\n"
-                message += "\n"
-        conn.close()
-        await interaction.followup.send(message)
-    except Exception as e:
-        logger.error(f"Error in /car_usage command: {e}", exc_info=True)
-        await interaction.followup.send("An error occurred while fetching car usage data.", ephemeral=True)
-
-@client.tree.command(name="car_usage_select")
-async def car_usage_select(interaction: discord.Interaction):
-    """Shows total miles driven by each user and their last 5 activities, prompts for car selection."""
-    view = CarUsageView(CARS)
-    await interaction.response.send_message("Which car do you want to see usage for?", view=view, ephemeral=True) # Send ephemeral message to get car selection
-
-    try:
-        await view.wait() # Wait for the view to be completed (car selection)
-        if view.selected_car is None:
-            await interaction.followup.send("You did not select a car.", ephemeral=True)
-            return
-
-        conn = get_db_connection()
-        users_with_miles = get_all_users_with_miles(conn)
-        car_name = view.selected_car
-        car_id = get_car_id_from_name(conn, car_name)
-        message = f"Car Usage Statistics for **{car_name}**:\n\n"
-        for user_id, user_data in users_with_miles.items():
-            member = interaction.guild.get_member(int(user_id))
-            if member:
-                user_name = member.name
-            else:
-                user_name = user_data.get("name", "Unknown User")
-            total_miles = user_data["total_miles"]
-            message += f"{user_name}: Total Miles Driven: {total_miles:.2f} miles\n"
-            if car_id:
-                last_10_activities = get_car_drive_history(conn, car_id, 5)
-                last_10_activities += get_car_fill_history(conn, car_id, 5)
-                last_10_activities = sorted(last_10_activities, key=lambda x: x[3], reverse=True)[:5]
-                if last_10_activities:
-                    message += "  **Last 5 Activities:**\n" + format_activity_log(last_10_activities)
-                else:
-                    message += "  No recent activity recorded.\n"
-            else:
-                message += f"  Car '{car_name}' not found.\n"
-            message += "\n"
-        conn.close()
-        await interaction.followup.send(message)
-    except Exception as e:
-        logger.error(f"Error in /car_usage_select command: {e}", exc_info=True)
-        await interaction.followup.send("An error occurred while fetching car usage data.", ephemeral=True) # Send error as followup
-
-
 @client.tree.command(name="help")
 async def help(interaction: discord.Interaction):
     """Provides instructions on how to use the Gas Bot."""
@@ -605,9 +497,6 @@ This bot helps track gas expenses and calculate how much each user owes.
 *   `/balance`: Shows your current balance (how much you owe or are owed) - *ephemeral, only visible to you*.
 *   `/allbalances`: Shows balances of all users, total miles driven, near empty cars, and last activities.
 *   `/settle`: Resets everyone's balance to zero.
-*   `/car_usage` [car]: Shows total miles driven by each user and their last 5 activities.
-    *   **car:** (Optional) If specified, shows the last 5 activities for a specific car.
-*   `/car_usage_select`: Shows total miles driven by each user and their last 5 activities, prompts for car selection.
 *   `/help`: Displays this help message.
 
 **Example Usage:**
@@ -619,9 +508,6 @@ This bot helps track gas expenses and calculate how much each user owes.
 4. **Check Balance:**
     `/balance` (Shows your current balance - only visible to you)
     `/allbalances` (Shows all balances and car activities)
-5. **Car Usage**
-    `/car_usage` (Shows total miles driven by each user)
-    `/car_usage_select` (Shows total miles driven by each user and prompts for car selection)
 
 **Important Notes:**
 
@@ -629,7 +515,6 @@ This bot helps track gas expenses and calculate how much each user owes.
 *   When using `/drove`, select the car you drove and indicate if it was near empty.
 *   `/settle` resets all balances to zero.
 *   `/car_usage` provides insights into driving activity.
-*   `/car_usage_select` provides insights into driving activity for a specific car.
 *   `/balance` is ephemeral and only visible to you for privacy.
 
 If you have any questions, feel free to ask!
