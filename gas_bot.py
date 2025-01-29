@@ -197,10 +197,10 @@ def get_last_10_activities_for_all_cars(conn):
         activities_data[row[0]] = row[1] # car name, activity log string
     return activities_data
 
-def get_last_10_combined_activities(conn):
+def get_last_10_combined_activities_new(conn):
     cur = conn.cursor()
-    cur.execute("SELECT * FROM get_last_10_activities_for_user_func(NULL)") # Pass NULL for user_id to get all combined
-    return cur.fetchone()[0] if cur.fetchone() else "" # Returns a single string log
+    cur.execute("SELECT * FROM get_last_10_combined_activities_func()")
+    return cur.fetchone()[0] if cur.fetchone() else ""
 
 def get_near_empty_cars(conn):
     cur = conn.cursor()
@@ -250,7 +250,7 @@ class CarDropdown(discord.ui.Select):
             users_with_miles = get_all_users_with_miles(conn)
             near_empty_cars = get_near_empty_cars(conn)
             last_10_activities_all_cars = get_last_10_activities_for_all_cars(conn)
-            last_10_combined_activities = get_last_10_combined_activities(conn)
+            last_10_combined_activities = get_last_10_combined_activities_new(conn)
             conn.close()
 
             message = f"{last_drive_message}"
@@ -318,7 +318,7 @@ class FillView(discord.ui.View):
                 users_with_miles = get_all_users_with_miles(conn)
                 near_empty_cars = get_near_empty_cars(conn)
                 last_10_activities_all_cars = get_last_10_activities_for_all_cars(conn)
-                last_10_combined_activities = get_last_10_combined_activities(conn)
+                last_10_combined_activities = get_last_10_combined_activities_new(conn)
                 conn.close()
 
                 message = "Gas fill-up recorded.\n\n"
@@ -385,7 +385,7 @@ async def allbalances(interaction: discord.Interaction):
         users_with_miles = get_all_users_with_miles(conn)
         near_empty_cars = get_near_empty_cars(conn)
         last_10_activities_all_cars = get_last_10_activities_for_all_cars(conn)
-        last_10_combined_activities = get_last_10_combined_activities(conn)
+        last_10_combined_activities = get_last_10_combined_activities_new(conn)
         conn.close()
 
         message = format_balance_message(users_with_miles, near_empty_cars, last_10_combined_activities, last_10_activities_all_cars, interaction)
@@ -415,7 +415,7 @@ async def settle(interaction: discord.Interaction):
         users_with_miles = get_all_users_with_miles(conn)
         near_empty_cars = get_near_empty_cars(conn)
         last_10_activities_all_cars = get_last_10_activities_for_all_cars(conn)
-        last_10_combined_activities = get_last_10_combined_activities(conn)
+        last_10_combined_activities = get_last_10_combined_activities_new(conn)
         conn.close()
 
         message = "Balances have been settled to zero.\n\n"
