@@ -82,16 +82,16 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
         message += f"**{user_name}**: {user_data['total_miles']:.2f} miles\n"
     message += "```\n"
 
-    message += "### Last 10 Recordings (Drives & Fills)\n"
-    message += "-# Here are the last 10 drive and fill activities:\n"
+    message += "### Last 5 Recordings (Drives & Fills)\n"
+    message += "-# Here are the last 5 drive and fill activities:\n"
     if last_10_combined_activities:
          message += f"```\n{last_10_combined_activities}\n```\n"
     else:
         message += "No recent activity recorded.\n"
     message += "\n"
 
-    message += "### Last 10 Activities per Car\n"
-    message += "-#  Here are the last 10 activities for each car:\n"
+    message += "### Last 5 Activities per Car\n"
+    message += "-#  Here are the last 5 activities for each car:\n"
     for car_name, activities in last_10_activities_all_cars.items():
         message += f"**{car_name}**:\n"
         if activities:
@@ -179,22 +179,22 @@ def record_fill(conn, user_id, user_name, car_name, amount, price_per_gallon, pa
     cur.callproc('record_fill_func', (user_id, user_name, car_name, amount, price_per_gallon, payment_amount))
     conn.commit()
 
-def get_user_drive_history(conn, user_id, limit=10):
+def get_user_drive_history(conn, user_id, limit=5):
     cur = conn.cursor()
     cur.execute("SELECT * FROM get_user_drive_history_func(%s, %s)", (user_id, limit))
     return cur.fetchall()
 
-def get_user_fill_history(conn, user_id, limit=10):
+def get_user_fill_history(conn, user_id, limit=5):
     cur = conn.cursor()
     cur.execute("SELECT * FROM get_user_fill_history_func(%s, %s)", (user_id, limit))
     return cur.fetchall()
 
-def get_car_drive_history(conn, car_id, limit=10):
+def get_car_drive_history(conn, car_id, limit=5):
     cur = conn.cursor()
     cur.execute("SELECT * FROM get_car_drive_history_func(%s, %s)", (car_id, limit))
     return cur.fetchall()
 
-def get_car_fill_history(conn, car_id, limit=10):
+def get_car_fill_history(conn, car_id, limit=5):
     cur = conn.cursor()
     cur.execute("SELECT * FROM get_car_fill_history_func(%s, %s)", (car_id, limit))
     return cur.fetchall()
@@ -312,6 +312,7 @@ class CarDropdown(discord.ui.Select):
             except Exception as e:
                 logger.error(f"Error in /filled command: {e}", exc_info=True)
                 await interaction.followup.send("An error occurred while recording the gas fill-up.", ephemeral=True) # Send error as followup
+
 
 class DroveView(discord.ui.View):
     def __init__(self, distance, cars):
@@ -487,7 +488,8 @@ async def car_usage(interaction: discord.Interaction):
         conn = get_db_connection()
         users_with_miles = get_all_users_with_miles(conn)
         message = "Car Usage Statistics:\n\n"
-        for user_id, user_data in users_with_miles.items():
+
+                for user_id, user_data in users_with_miles.items():
             member = interaction.guild.get_member(int(user_id))
             if member:
                 user_name = member.name
@@ -586,16 +588,16 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
         message += f"**{user_name}**: {user_data['total_miles']:.2f} miles\n"
     message += "```\n"
 
-    message += "### Last 10 Recordings (Drives & Fills)\n"
-    message += "-# Here are the last 10 drive and fill activities:\n"
+    message += "### Last 5 Recordings (Drives & Fills)\n"
+    message += "-# Here are the last 5 drive and fill activities:\n"
     if last_10_combined_activities:
          message += f"```\n{last_10_combined_activities}\n```\n"
     else:
         message += "No recent activity recorded.\n"
     message += "\n"
 
-    message += "### Last 10 Activities per Car\n"
-    message += "-#  Here are the last 10 activities for each car:\n"
+    message += "### Last 5 Activities per Car\n"
+    message += "-#  Here are the last 5 activities for each car:\n"
     for car_name, activities in last_10_activities_all_cars.items():
         message += f"**{car_name}**:\n"
         if activities:
