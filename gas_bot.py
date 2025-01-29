@@ -572,7 +572,7 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
             user_name = member.name
         else:
             user_name = user_data.get("name", "Unknown User")
-        message += f"**{user_name}**: ${user_data['total_owed']:.2f}\n"
+        message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
     message += "```\n"
 
     message += "### Total Miles Driven by User\n"
@@ -584,7 +584,7 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
             user_name = member.name
         else:
             user_name = user_data.get("name", "Unknown User")
-        message += f"**{user_name}**: {user_data['total_miles']:.2f} miles\n"
+        message += f"{user_name}: {user_data['total_miles']:.2f} miles\n"
     message += "```\n"
 
     message += "### Last 5 Recordings (Drives & Fills)\n"
