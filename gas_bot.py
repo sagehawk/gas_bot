@@ -593,7 +593,7 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
 
     message += "### Total Miles Driven by User\n"
     message += "-#  Here are the total miles driven by each user:\n"
-       message += "```\n"
+    message += "```\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
         if member:
