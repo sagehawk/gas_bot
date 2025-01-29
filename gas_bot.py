@@ -12,7 +12,7 @@ import logging
 # --- Configuration ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 DATABASE_URL = os.environ.get("DATABASE_URL")
-DATABASE_NAME = "railway" # Replace if using a specific database name
+DATABASE_NAME = "railway"  # Replace if using a specific database name
 TARGET_CHANNEL_ID = 1319440273868062861
 
 # --- Bot Setup ---
@@ -45,7 +45,7 @@ def format_activity_log(records):
         user_name = record[1]
         activity_detail = record[2]
         date_obj = datetime.datetime.fromisoformat(record[3])
-        formatted_date = date_obj.strftime("%A, %b %eth")
+        formatted_date = date_obj.strftime("%A, %b %d")  # Corrected date format
         log_message += f"{user_name} {record_type} {activity_detail} on {formatted_date}\n"
     return log_message
 
@@ -54,11 +54,13 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
 
     if near_empty_cars:
         message += "### Cars Near Empty\n"
+        message += "-#  The following cars were marked as near empty recently:\n"
         for car in near_empty_cars:
             message += f"- **{car}**\n"
         message += "\n"
 
     message += "### Current Amounts Owed\n"
+    message += "-#  Here are the current balances for each user:\n"
     message += "```\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
@@ -70,6 +72,7 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
     message += "```\n"
 
     message += "### Total Miles Driven by User\n"
+    message += "-#  Here are the total miles driven by each user:\n"
     message += "```\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
@@ -81,6 +84,7 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
     message += "```\n"
 
     message += "### Last 5 Recordings (Drives & Fills)\n"
+    message += "-# Here are the last 5 drive and fill activities:\n"
     if last_10_combined_activities:
          message += f"```\n{last_10_combined_activities}\n```\n"
     else:
@@ -88,6 +92,7 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
     message += "\n"
 
     message += "### Last 5 Activities per Car\n"
+    message += "-#  Here are the last 5 activities for each car:\n"
     for car_name, activities in last_10_activities_all_cars.items():
         message += f"**{car_name}**:\n"
         if activities:
@@ -516,57 +521,7 @@ This bot helps track gas expenses and calculate how much each user owes.
 If you have any questions, feel free to ask!
 """
     await interaction.response.send_message(help_message, ephemeral=True) #Ephemeral help message
-def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_activities, last_10_activities_all_cars, interaction):
-    message = ""
 
-    if near_empty_cars:
-        message += "### Cars Near Empty\n"
-        message += "-#  The following cars were marked as near empty recently:\n"
-        for car in near_empty_cars:
-            message += f"- **{car}**\n"
-        message += "\n"
-
-    message += "### Current Amounts Owed\n"
-    message += "-#  Here are the current balances for each user:\n"
-    message += "```\n"
-    for user_id, user_data in users_with_miles.items():
-        member = interaction.guild.get_member(int(user_id))
-        if member:
-            user_name = member.name
-        else:
-            user_name = user_data.get("name", "Unknown User")
-        message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
-    message += "```\n"
-
-    message += "### Total Miles Driven by User\n"
-    message += "-#  Here are the total miles driven by each user:\n"
-    message += "```\n"
-    for user_id, user_data in users_with_miles.items():
-        member = interaction.guild.get_member(int(user_id))
-        if member:
-            user_name = member.name
-        else:
-            user_name = user_data.get("name", "Unknown User")
-        message += f"{user_name}: {user_data['total_miles']:.2f} miles\n"
-    message += "```\n"
-
-    message += "### Last 5 Recordings (Drives & Fills)\n"
-    message += "-# Here are the last 5 drive and fill activities:\n"
-    if last_10_combined_activities:
-         message += f"```\n{last_10_combined_activities}\n```\n"
-    else:
-        message += "No recent activity recorded.\n"
-    message += "\n"
-
-    message += "### Last 5 Activities per Car\n"
-    message += "-#  Here are the last 5 activities for each car:\n"
-    for car_name, activities in last_10_activities_all_cars.items():
-        message += f"**{car_name}**:\n"
-        if activities:
-            message += f"```\n{activities}\n```\n"
-        else:
-             message += "No recent activity recorded.\n"
-    return message
 
 # --- Function to start the bot ---
 async def main():
