@@ -200,7 +200,11 @@ def get_last_10_activities_for_all_cars(conn):
 def get_last_10_combined_activities_new(conn):
     cur = conn.cursor()
     cur.execute("SELECT * FROM get_last_10_combined_activities_func()")
-    return cur.fetchone()[0] if cur.fetchone() else ""
+    result = cur.fetchone()
+    if result:
+       return result[0]
+    else:
+       return ""
 
 def get_near_empty_cars(conn):
     cur = conn.cursor()
