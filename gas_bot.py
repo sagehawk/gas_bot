@@ -481,8 +481,9 @@ async def settle(interaction: discord.Interaction):
 
 
 @client.tree.command(name="car_usage")
-async def car_usage(interaction: discord.Interaction):
-    """Shows total miles driven by each user and their last 10 activities."""
+@app_commands.describe(car="Car to show usage for")
+async def car_usage(interaction: discord.Interaction, car: str = None):
+    """Shows total miles driven by each user and their last 5 activities."""
     await interaction.response.defer() # Defer response
     try:
         conn = get_db_connection()
@@ -496,11 +497,24 @@ async def car_usage(interaction: discord.Interaction):
                 user_name = user_data.get("name", "Unknown User")
             total_miles = user_data["total_miles"]
             message += f"**{user_name}**: Total Miles Driven: {total_miles:.2f} miles\n"
-            last_10_activities = get_last_10_activities_for_user(conn, user_id)
-            if last_10_activities:
-                message += "  **Last 10 Activities:**\n" + last_10_activities[0] # activities are already formatted in SQL function
+            if car:
+                car_id = get_car_id_from_name(conn, car)
+                if car_id:
+                    last_10_activities = get_car_drive_history(conn, car_id, 5)
+                    last_10_activities += get_car_fill_history(conn, car_id, 5)
+                    last_10_activities = sorted(last_10_activities, key=lambda x: x[3], reverse=True)[:5]
+                    if last_10_activities:
+                        message += f"  **Last 5 Activities for {car}:**\n" + format_activity_log(last_10_activities)
+                    else:
+                        message += f"  No recent activity recorded for {car}.\n"
+                else:
+                    message += f"  Car '{car}' not found.\n"
             else:
-                message += "  No recent activity recorded.\n"
+                last_10_activities = get_last_10_activities_for_user(conn, user_id)
+                if last_10_activities:
+                    message += "  **Last 5 Activities:**\n" + last_10_activities[0] # activities are already formatted in SQL function
+                else:
+                    message += "  No recent activity recorded.\n"
             message += "\n"
         conn.close()
         await interaction.followup.send(message)
@@ -527,7 +541,8 @@ This bot helps track gas expenses and calculate how much each user owes.
 *   `/balance`: Shows your current balance (how much you owe or are owed) - *ephemeral, only visible to you*.
 *   `/allbalances`: Shows balances of all users, total miles driven, near empty cars, and last activities.
 *   `/settle`: Resets everyone's balance to zero.
-*   `/car_usage`: Shows total miles driven by each user and their last 10 activities.
+*   `/car_usage` [car]: Shows total miles driven by each user and their last 5 activities.
+    *   **car:** (Optional) If specified, shows the last 5 activities for a specific car.
 *   `/help`: Displays this help message.
 
 **Example Usage:**
@@ -541,6 +556,7 @@ This bot helps track gas expenses and calculate how much each user owes.
     `/allbalances` (Shows all balances and car activities)
 5. **Car Usage:**
     `/car_usage` (Shows total miles driven by each user)
+    `/car_usage Yellow Subaru` (Shows total miles driven by each user and last 5 activities for Yellow Subaru)
 
 **Important Notes:**
 
@@ -572,19 +588,19 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
             user_name = member.name
         else:
             user_name = user_data.get("name", "Unknown User")
-        message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
+        message += f"**{user_name}**: ${user_data['total_owed']:.2f}\n"
     message += "```\n"
 
     message += "### Total Miles Driven by User\n"
     message += "-#  Here are the total miles driven by each user:\n"
-    message += "```\n"
+       message += "```\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
         if member:
             user_name = member.name
         else:
             user_name = user_data.get("name", "Unknown User")
-        message += f"{user_name}: {user_data['total_miles']:.2f} miles\n"
+        message += f"**{user_name}**: {user_data['total_miles']:.2f} miles\n"
     message += "```\n"
 
     message += "### Last 5 Recordings (Drives & Fills)\n"
