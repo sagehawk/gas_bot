@@ -38,24 +38,18 @@ def calculate_cost(distance, mpg, price_per_gallon):
     gallons_used = distance / mpg
     return gallons_used * price_per_gallon
 
-def format_activity_log(records):
-    log_message = ""
-    for record in records:
-        record_type = record[0]
-        user_name = record[1]
-        activity_detail = record[2]
-        date = record[3]
-        log_message += f"{user_name} {record_type} {activity_detail} on {date}\n"
-    return log_message
-
 def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_activities, last_10_activities_all_cars, interaction):
     message = ""
 
     if near_empty_cars:
-        message += "### Cars Near Empty:\n"
-        message += "\n".join(near_empty_cars) + "\n\n"
+        message += "### Cars Near Empty\n"
+        message += "-#  The following cars were marked as near empty recently:\n"
+        for car in near_empty_cars:
+            message += f"- **{car}**\n"
+        message += "\n"
 
-    message += "### Current Amounts Owed:\n"
+    message += "### Current Amounts Owed\n"
+    message += "-#  Here are the current balances for each user:\n"
     message += "```\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
@@ -63,10 +57,11 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
             user_name = member.name
         else:
             user_name = user_data.get("name", "Unknown User")
-        message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
+        message += f"**{user_name}**: ${user_data['total_owed']:.2f}\n"
     message += "```\n"
 
-    message += "### Total Miles Driven by User:\n"
+    message += "### Total Miles Driven by User\n"
+    message += "-#  Here are the total miles driven by each user:\n"
     message += "```\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
@@ -74,16 +69,19 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
             user_name = member.name
         else:
             user_name = user_data.get("name", "Unknown User")
-        message += f"{user_name}: {user_data['total_miles']:.2f} miles\n"
+        message += f"**{user_name}**: {user_data['total_miles']:.2f} miles\n"
     message += "```\n"
 
-    message += "### Last 10 Recordings (Drives & Fills):\n"
+    message += "### Last 10 Recordings (Drives & Fills)\n"
+    message += "-# Here are the last 10 drive and fill activities:\n"
     if last_10_combined_activities:
          message += f"```\n{last_10_combined_activities}\n```\n"
     else:
         message += "No recent activity recorded.\n"
+    message += "\n"
 
-    message += "### Last 10 Activities per Car:\n"
+    message += "### Last 10 Activities per Car\n"
+    message += "-#  Here are the last 10 activities for each car:\n"
     for car_name, activities in last_10_activities_all_cars.items():
         message += f"**{car_name}**:\n"
         if activities:
@@ -91,7 +89,6 @@ def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_a
         else:
              message += "No recent activity recorded.\n"
     return message
-
 
 # --- Database Functions ---
 def get_db_connection():
