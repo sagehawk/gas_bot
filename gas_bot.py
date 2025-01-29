@@ -488,8 +488,7 @@ async def car_usage(interaction: discord.Interaction):
         conn = get_db_connection()
         users_with_miles = get_all_users_with_miles(conn)
         message = "Car Usage Statistics:\n\n"
-
-                for user_id, user_data in users_with_miles.items():
+        for user_id, user_data in users_with_miles.items():
             member = interaction.guild.get_member(int(user_id))
             if member:
                 user_name = member.name
