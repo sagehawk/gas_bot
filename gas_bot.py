@@ -44,10 +44,13 @@ def format_activity_log(records):
         record_type = record[0]
         user_name = record[1]
         activity_detail = record[2]
+        # Parse the timestamp from the ISO format in the database
         date_obj = datetime.datetime.fromisoformat(record[3])
+        # Format the date for the activity log
         formatted_date = date_obj.strftime("%A, %b %d")  # Corrected date format
         log_message += f"{user_name} {record_type} {activity_detail} on {formatted_date}\n"
     return log_message
+
 
 def format_balance_message(users_with_miles, near_empty_cars, last_10_combined_activities, last_10_activities_all_cars, interaction):
     message = ""
@@ -172,12 +175,16 @@ def get_current_gas_price(conn):
 
 def record_drive(conn, user_id, user_name, car_name, distance, cost, near_empty):
     cur = conn.cursor()
-    cur.callproc('record_drive_func', (user_id, user_name, car_name, distance, cost, near_empty))
+    # Include the formatted timestamp when inserting a drive record
+    timestamp_iso = datetime.datetime.now().isoformat()
+    cur.callproc('record_drive_func', (user_id, user_name, car_name, distance, cost, near_empty, timestamp_iso))
     conn.commit()
 
 def record_fill(conn, user_id, user_name, car_name, amount, price_per_gallon, payment_amount):
     cur = conn.cursor()
-    cur.callproc('record_fill_func', (user_id, user_name, car_name, amount, price_per_gallon, payment_amount))
+    # Include the formatted timestamp when inserting a fill record
+    timestamp_iso = datetime.datetime.now().isoformat()
+    cur.callproc('record_fill_func', (user_id, user_name, car_name, amount, price_per_gallon, payment_amount, timestamp_iso))
     conn.commit()
 
 def get_user_drive_history(conn, user_id, limit=5):
