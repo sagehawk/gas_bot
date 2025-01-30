@@ -49,47 +49,44 @@ def format_activity_log(records): #Keeping this for now
     return log_message
 
 def format_balance_message(users_with_miles, car_data, interaction):
-    message = ""  # Initialize message here
+    message = ""
+
+    # Nickname mapping
+    nickname_mapping = {
+        "513552727096164378": "Sajjad", #oneofzero
+        "1086402596332883978": "Abbas", #mrmario
+        "434171817517778965": "Jafar", #agakatulu
+        "258051981868912640": "Ali", #Agent
+        "1034247813796782130": "Mosa", #Yoshisaki
+    }
+
+    message += "### Current Amounts Owed\n"
+    message += ">>>\n"
+    for user_id, user_data in users_with_miles.items():
+        nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
+        message += f"{nickname}: ${user_data['total_owed']:.2f}\n"
+    message += ">>>\n"
 
     message += "### Car Status and Costs\n"
-    message += "```\n"
+    message += ">>>\n"
     for car_name, car_info in car_data.items():
         message += f"{car_name}: Cost/Mile: ${car_info['cost_per_mile']:.2f}"
         if car_info['near_empty']:
              message += " (Near Empty)"
         message += "\n"
-    message += "```\n"
-
-    message += "### Current Amounts Owed\n"
-    message += "```\n"
-    for user_id, user_data in users_with_miles.items():
-        member = interaction.guild.get_member(int(user_id))
-        if member:
-            user_name = member.name
-        else:
-            user_name = user_data.get("name", "Unknown User")
-        message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
-    message += "```\n"
+    message += ">>>\n"
 
     message += "### Total Miles Driven by User\n"
-    message += "```\n"
+    message += ">>>\n"
     for user_id, user_data in users_with_miles.items():
-        member = interaction.guild.get_member(int(user_id))
-        if member:
-            user_name = member.name
-        else:
-            user_name = user_data.get("name", "Unknown User")
-        message += f"{user_name}: {user_data['total_miles']:.2f} miles\n"
-    message += "```\n"
+        nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
+        message += f"{nickname}: {user_data['total_miles']:.2f} miles\n"
+    message += ">>>\n"
 
     message += "### User Car Usage\n"
     for user_id, user_data in users_with_miles.items():
-        member = interaction.guild.get_member(int(user_id))
-        if member:
-            user_name = member.name
-        else:
-            user_name = user_data.get("name", "Unknown User")
-        message += f"**{user_name}**:\n"
+        nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
+        message += f"**{nickname}**:\n"
         if user_data['car_usage']:
             for car_usage in user_data['car_usage']:
                 message += f"  > {car_usage['car_name']}: {car_usage['miles']:.2f} miles, ${car_usage['fill_amount']:.2f} in fills\n"
