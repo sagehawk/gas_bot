@@ -91,6 +91,32 @@ def format_balance_message(users_with_miles, car_data, interaction):
         else:
             user_name = user_data.get("name", "Unknown User")
         message += f"{user_name}:\n"
+        if user_data['car_usage']:
+            for car_usage in user_data['car_usage']:
+                message += f"  {car_usage['car_name']}: {car_usage['miles']:.2f} miles, ${car_usage['fill_amount']:.2f} in fills\n"
+    message += "```\n"
+    return message
+
+    message += "### Total Miles Driven by User\n"
+    message += "```\n"
+    for user_id, user_data in users_with_miles.items():
+        member = interaction.guild.get_member(int(user_id))
+        if member:
+            user_name = member.name
+        else:
+            user_name = user_data.get("name", "Unknown User")
+        message += f"{user_name}: {user_data['total_miles']:.2f} miles\n"
+    message += "```\n"
+
+    message += "### User Car Usage\n"
+    message += "```\n"
+    for user_id, user_data in users_with_miles.items():
+        member = interaction.guild.get_member(int(user_id))
+        if member:
+            user_name = member.name
+        else:
+            user_name = user_data.get("name", "Unknown User")
+        message += f"{user_name}:\n"
         for car_name, car_usage in user_data['car_usage'].items():
             message += f"  {car_name}: {car_usage['miles']:.2f} miles, ${car_usage['fill_amount']:.2f} in fills\n"
     message += "```\n"
