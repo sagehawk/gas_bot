@@ -52,16 +52,16 @@ def format_balance_message(users_with_miles, car_data, interaction):
     message = ""
 
     message += "### Car Status and Costs\n"
-    message += "```\n"
+    message += ">>>\n"
     for car_name, car_info in car_data.items():
         message += f"{car_name}: Cost/Mile: ${car_info['cost_per_mile']:.2f}"
         if car_info['near_empty']:
              message += " (Near Empty)"
         message += "\n"
-    message += "```\n"
+    message += ">>>\n"
 
     message += "### Current Amounts Owed\n"
-    message += "```\n"
+    message += ">>>\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
         if member:
@@ -69,10 +69,10 @@ def format_balance_message(users_with_miles, car_data, interaction):
         else:
             user_name = user_data.get("name", "Unknown User")
         message += f"{user_name}: ${user_data['total_owed']:.2f}\n"
-    message += "```\n"
+    message += ">>>\n"
 
     message += "### Total Miles Driven by User\n"
-    message += "```\n"
+    message += ">>>\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
         if member:
@@ -80,10 +80,10 @@ def format_balance_message(users_with_miles, car_data, interaction):
         else:
             user_name = user_data.get("name", "Unknown User")
         message += f"{user_name}: {user_data['total_miles']:.2f} miles\n"
-    message += "```\n"
+    message += ">>>\n"
 
     message += "### User Car Usage\n"
-    message += "```\n"
+    message += ">>>\n"
     for user_id, user_data in users_with_miles.items():
         member = interaction.guild.get_member(int(user_id))
         if member:
@@ -94,7 +94,8 @@ def format_balance_message(users_with_miles, car_data, interaction):
         if user_data['car_usage']:
             for car_usage in user_data['car_usage']:
                 message += f"  {car_usage['car_name']}: {car_usage['miles']:.2f} miles, ${car_usage['fill_amount']:.2f} in fills\n"
-    message += "```\n"
+        message += "\n"  # Add a newline after each user
+    message += ">>>\n"
     return message
 
     message += "### Total Miles Driven by User\n"
