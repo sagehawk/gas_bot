@@ -87,7 +87,18 @@ def format_balance_message(users_with_miles, car_data, interaction):
            message += f"{nickname}: {user_data['total_miles']:.2f} miles\n"
     message += "```\n"
 
-    message += "### User Car Usage\n"
+    return message
+
+def format_car_usage_message(users_with_miles):
+    message = "### User Car Usage\n"
+    nickname_mapping = {
+        "858864178962235393": "Abbas",  # mrmario
+        "513552727096164378": "Sajjad",  # oneofzero
+        "758778170421018674": "Jafar",  # agakatulu
+        "838206242127085629": "Mosa",  # Yoshisaki
+        "393241098002235392": "Ali",  # Agent
+    }
+
     for user_id in nickname_mapping:
         if user_id in users_with_miles:
             user_data = users_with_miles[user_id]
@@ -98,6 +109,7 @@ def format_balance_message(users_with_miles, car_data, interaction):
                     message += f"  > {car_usage['car_name']}: {car_usage['miles']:.2f} miles, ${car_usage['fill_amount']:.2f} in fills\n"
             message += "\n"
     return message
+
 
 # --- Database Functions ---
 def get_db_connection():
@@ -113,18 +125,12 @@ def initialize_cars_in_db(conn):
 def get_car_id_from_name(conn, car_name):
     cur = conn.cursor()
     cur.execute("SELECT id FROM cars WHERE name = %s", (car_name,))
-    car_data = cur.fetchone()
-    if car_data:
-        return car_data[0]
-    return None
+    return cur.fetchone()[0] if cur.fetchone() else None
 
 def get_car_name_from_id(conn, car_id):
     cur = conn.cursor()
     cur.execute("SELECT name FROM cars WHERE id = %s", (car_id,))
-    car_data = cur.fetchone()
-    if car_data:
-        return car_data[0]
-    return None
+    return cur.fetchone()[0] if cur.fetchone() else None
 
 def get_or_create_user(conn, user_id, user_name):
   cur = conn.cursor()
@@ -220,16 +226,12 @@ def get_last_10_combined_activities_new(conn): # No longer used
     cur = conn.cursor()
     cur.execute("SELECT * FROM get_last_10_combined_activities_func()")
     result = cur.fetchone()
-    if result:
-       return result[0]
-    else:
-       return ""
+    return result[0] if result else ""
 
 def get_near_empty_cars(conn): # No longer used
     cur = conn.cursor()
     cur.execute("SELECT * FROM get_near_empty_cars()")
-    cars = [row[0] for row in cur.fetchall()]
-    return cars
+    return [row[0] for row in cur.fetchall()]
 
 def get_car_data(conn):
     cur = conn.cursor()
@@ -340,11 +342,8 @@ class DroveView(discord.ui.View):
     async def near_empty_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer() #Defer response
         self.near_empty = not self.near_empty # Toggle near_empty
-        if self.near_empty:
-            button.style = discord.ButtonStyle.danger # Change style to indicate active
-        else:
-            button.style = discord.ButtonStyle.secondary # Revert style
-        await interaction.response.edit_message(view=self) # Update the view to reflect button change
+        button.style = discord.ButtonStyle.danger if self.near_empty else discord.ButtonStyle.secondary
+        await interaction.edit_original_response(view=self) # Update the view to reflect button change
 
 class FillView(discord.ui.View):
     def __init__(self, price_per_gallon, payment_amount, cars, payer=None):
@@ -463,6 +462,21 @@ async def allbalances(interaction: discord.Interaction):
         logger.error(f"Error in /allbalances command: {e}", exc_info=True)
         await interaction.followup.send("An error occurred while displaying balances.", ephemeral=True)
 
+@client.tree.command(name="car_usage")
+async def car_usage(interaction: discord.Interaction):
+    """Displays car usage data."""
+    await interaction.response.defer() # Defer response as it might take longer
+    try:
+      conn = get_db_connection()
+      users_with_miles = get_all_users_with_miles(conn)
+      conn.close()
+
+      message = format_car_usage_message(users_with_miles)
+      await interaction.followup.send(message)
+    except Exception as e:
+        logger.error(f"Error in /car_usage command: {e}", exc_info=True)
+        await interaction.followup.send("An error occurred while displaying car usage.", ephemeral=True)
+
 @client.tree.command(name="settle")
 async def settle(interaction: discord.Interaction):
     """Resets everyone's balance to zero."""
@@ -511,6 +525,7 @@ This bot helps track gas expenses and calculate how much each user owes.
     *   **distance**: The distance driven in miles.
 *   `/balance`: Shows your current balance (how much you owe or are owed) - *ephemeral, only visible to you*.
 *   `/allbalances`: Shows balances of all users, total miles driven, car cost per mile, and car near empty status.
+*   `/car_usage`: Shows car usage data.
 *   `/settle`: Resets everyone's balance to zero.
 *   `/help`: Displays this help message.
 
