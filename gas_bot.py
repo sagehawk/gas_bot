@@ -248,7 +248,7 @@ class CarDropdown(discord.ui.Select):
         options = [discord.SelectOption(label=car["name"], value=car["name"]) for car in cars]
         super().__init__(placeholder="Choose a car...", min_values=1, max_values=1, options=options)
 
-    async def callback(self, interaction: discord.Interaction):
+        async def callback(self, interaction: discord.Interaction):
         self.view.selected_car = self.values[0]
         self.view.interaction_ref = interaction  # Store interaction for later use
         if isinstance(self.view, DroveView): # Handle DroveView specific logic
