@@ -288,7 +288,7 @@ class CarDropdown(discord.ui.Select):
                 return
 
             if interaction.channel.id == TARGET_CHANNEL_ID:
-               await interaction.channel.purge(limit=None)
+              await interaction.channel.purge(limit=None)
 
             conn = get_db_connection()
             users_with_miles = get_all_users_with_miles(conn)
@@ -298,10 +298,11 @@ class CarDropdown(discord.ui.Select):
             message = f"{last_drive_message}"
             message += format_balance_message(users_with_miles, car_data, interaction)
 
-            await interaction.response.edit_message(content=message, view=None) # Edit the ephemeral message to show results and remove view
+            await interaction.response.edit_message(content=message, view=None)  # Send the ephemeral message
 
             # Now, trigger the allbalances command
-            await client.tree.command(name="allbalances")(interaction)
+            await allbalances(interaction)
+
 
         elif isinstance(self.view, FillView):
             try:
