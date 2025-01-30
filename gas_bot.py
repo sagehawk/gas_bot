@@ -61,31 +61,31 @@ def format_balance_message(users_with_miles, car_data, interaction):
     }
 
     message += "### Current Amounts Owed\n"
-    message += ">>>\n"
+    message += "```\n"
     for user_id in nickname_mapping: # iterate through user ids in the specified order
         if user_id in users_with_miles:
            user_data = users_with_miles[user_id]
            nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
            message += f"{nickname}: ${user_data['total_owed']:.2f}\n"
-    message += ">>>\n"
+    message += "```\n"
 
     message += "### Car Status and Costs\n"
-    message += ">>>\n"
+    message += "```\n"
     for car_name, car_info in car_data.items():
         message += f"{car_name}: Cost/Mile: ${car_info['cost_per_mile']:.2f}"
         if car_info['near_empty']:
             message += " (Near Empty)"
         message += "\n"
-    message += ">>>\n"
+    message += "```\n"
 
     message += "### Total Miles Driven by User\n"
-    message += ">>>\n"
+    message += "```\n"
     for user_id in nickname_mapping:
         if user_id in users_with_miles:
            user_data = users_with_miles[user_id]
            nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
            message += f"{nickname}: {user_data['total_miles']:.2f} miles\n"
-    message += ">>>\n"
+    message += "```\n"
 
     message += "### User Car Usage\n"
     for user_id in nickname_mapping:
