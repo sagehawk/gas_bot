@@ -256,6 +256,17 @@ class CarDropdown(discord.ui.Select):
             user_id = str(interaction.user.id)
             user_name = interaction.user.name
             user = get_or_create_user(conn, user_id, user_name)
+
+            # Nickname mapping
+            nickname_mapping = {
+                "858864178962235393": "Abbas",  # mrmario
+                "513552727096164378": "Sajjad",  # oneofzero
+                "758778170421018674": "Jafar",  # agakatulu
+                "838206242127085629": "Mosa",  # Yoshisaki
+                "393241098002235392": "Ali",  # Agent
+             }
+            nickname = nickname_mapping.get(user_id, user_name) # Get nickname or fall back to user_name
+
             current_price = get_current_gas_price(conn) # No longer used
 
             car_name = self.view.selected_car
@@ -270,7 +281,7 @@ class CarDropdown(discord.ui.Select):
                timestamp_iso = datetime.datetime.now().isoformat()
                record_drive(conn, user_id, user_name, car_name, distance_float, cost, self.view.near_empty, timestamp_iso)
                conn.close()
-               last_drive_message =  f"**{user_name}**: Recorded {self.view.distance} miles driven in {car_name}. Current cost: ${cost:.2f}. {'(Near Empty)' if self.view.near_empty else ''}\n\n"
+               last_drive_message =  f"**{nickname}**: Recorded {self.view.distance} miles driven in {car_name}. Current cost: ${cost:.2f}. {'(Near Empty)' if self.view.near_empty else ''}\n\n"
             except ValueError:
                 conn.close()
                 await interaction.followup.send(f"The distance value is not a valid number.", ephemeral=True) # Use follow-up here as initial response was deferred
