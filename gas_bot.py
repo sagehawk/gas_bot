@@ -281,27 +281,28 @@ class CarDropdown(discord.ui.Select):
                timestamp_iso = datetime.datetime.now().isoformat()
                record_drive(conn, user_id, user_name, car_name, distance_float, cost, self.view.near_empty, timestamp_iso)
                conn.close()
-               last_drive_message =  f"**{nickname}**: Recorded {self.view.distance} miles driven in {car_name}. Current cost: ${cost:.2f}. {'(Near Empty)' if self.view.near_empty else ''}\n\n"
+
             except ValueError:
                 conn.close()
                 await interaction.followup.send(f"The distance value is not a valid number.", ephemeral=True) # Use follow-up here as initial response was deferred
                 return
-
+            # After processing the drive and purging the channel
             if interaction.channel.id == TARGET_CHANNEL_ID:
-              await interaction.channel.purge(limit=None)
+                await interaction.channel.purge(limit=None)
 
             conn = get_db_connection()
             users_with_miles = get_all_users_with_miles(conn)
             car_data = get_car_data(conn)
             conn.close()
 
-            message = f"{last_drive_message}"
-            message += format_balance_message(users_with_miles, car_data, interaction)
+             # Edit the original ephemeral message to confirm
+            await interaction.response.edit_message(content=f"Drive recorded: {self.view.distance} miles in {car_name}.", view=None)
 
-            await interaction.response.edit_message(content=message, view=None)  # Send the ephemeral message
 
-            # Now, trigger the allbalances command
-            await allbalances(interaction)
+            # Send the balance information as a regular message to the channel
+            public_message = format_balance_message(users_with_miles, car_data, interaction)
+            await interaction.channel.send(public_message)
+
 
 
         elif isinstance(self.view, FillView):
