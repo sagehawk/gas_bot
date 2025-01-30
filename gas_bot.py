@@ -51,46 +51,52 @@ def format_activity_log(records): #Keeping this for now
 def format_balance_message(users_with_miles, car_data, interaction):
     message = ""
 
-    # Nickname mapping
+    # Nickname mapping with specified order
     nickname_mapping = {
-        "513552727096164378": "Sajjad", #oneofzero
-        "858864178962235393": "Abbas", #mrmario
-        "758778170421018674": "Jafar", #agakatulu
-        "393241098002235392": "Ali", #Agent
-        "838206242127085629": "Mosa", #Yoshisaki
+        "858864178962235393": "Abbas",  # mrmario
+        "513552727096164378": "Sajjad",  # oneofzero
+        "758778170421018674": "Jafar",  # agakatulu
+        "838206242127085629": "Mosa",  # Yoshisaki
+        "393241098002235392": "Ali",  # Agent
     }
 
     message += "### Current Amounts Owed\n"
-    message += "```\n"
-    for user_id, user_data in users_with_miles.items():
-        nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
-        message += f"{nickname}: ${user_data['total_owed']:.2f}\n"
-    message += "```\n"
+    message += ">>>\n"
+    for user_id in nickname_mapping: # iterate through user ids in the specified order
+        if user_id in users_with_miles:
+           user_data = users_with_miles[user_id]
+           nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
+           message += f"{nickname}: ${user_data['total_owed']:.2f}\n"
+    message += ">>>\n"
 
     message += "### Car Status and Costs\n"
-    message += "```\n"
+    message += ">>>\n"
     for car_name, car_info in car_data.items():
         message += f"{car_name}: Cost/Mile: ${car_info['cost_per_mile']:.2f}"
         if car_info['near_empty']:
-             message += " (Near Empty)"
+            message += " (Near Empty)"
         message += "\n"
-    message += "```\n"
+    message += ">>>\n"
 
     message += "### Total Miles Driven by User\n"
-    message += "```\n"
-    for user_id, user_data in users_with_miles.items():
-        nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
-        message += f"{nickname}: {user_data['total_miles']:.2f} miles\n"
-    message += "```\n"
+    message += ">>>\n"
+    for user_id in nickname_mapping:
+        if user_id in users_with_miles:
+           user_data = users_with_miles[user_id]
+           nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
+           message += f"{nickname}: {user_data['total_miles']:.2f} miles\n"
+    message += ">>>\n"
 
     message += "### User Car Usage\n"
-    for user_id, user_data in users_with_miles.items():
-        nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
-        message += f"**{nickname}**:\n"
-        if user_data['car_usage']:
-            for car_usage in user_data['car_usage']:
-                message += f"  > {car_usage['car_name']}: {car_usage['miles']:.2f} miles, ${car_usage['fill_amount']:.2f} in fills\n"
-        message += "\n"
+    for user_id in nickname_mapping:
+        if user_id in users_with_miles:
+            user_data = users_with_miles[user_id]
+            nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
+            message += f"**{nickname}**:\n"
+            if user_data['car_usage']:
+                for car_usage in user_data['car_usage']:
+                    message += f"  > {car_usage['car_name']}: {car_usage['miles']:.2f} miles, ${car_usage['fill_amount']:.2f} in fills\n"
+            message += "\n"
     return message
 
 
@@ -261,7 +267,8 @@ class CarDropdown(discord.ui.Select):
                cost = calculate_cost(distance_float, mpg, current_price) #No longer used
                total_owed = user["total_owed"] + cost
                save_user_data(conn, user_id, user_name, total_owed)
-               record_drive(conn, user_id, user_name, car_name, distance_float, cost, self.view.near_empty)
+               timestamp_iso = datetime.datetime.now().isoformat()
+               record_drive(conn, user_id, user_name, car_name, distance_float, cost, self.view.near_empty, timestamp_iso)
                conn.close()
                last_drive_message =  f"**{user_name}**: Recorded {self.view.distance} miles driven in {car_name}. Current cost: ${cost:.2f}. {'(Near Empty)' if self.view.near_empty else ''}\n\n"
             except ValueError:
@@ -291,8 +298,8 @@ class CarDropdown(discord.ui.Select):
                 price_per_gallon = self.view.price_per_gallon
                 payment_amount = self.view.payment_amount
                 payer_id = self.view.payer_id
-
-                record_fill(conn, user_id, user_name, car_name, 10, price_per_gallon, payment_amount, payer_id) # Assume 10 gallons, adjust as needed. Payment recorded.
+                timestamp_iso = datetime.datetime.now().isoformat()
+                record_fill(conn, user_id, user_name, car_name, 10, price_per_gallon, payment_amount, timestamp_iso, payer_id) # Assume 10 gallons, adjust as needed. Payment recorded.
 
                 if payer_id:
                   payer = get_or_create_user(conn, payer_id, user_name)
@@ -366,8 +373,8 @@ class FillView(discord.ui.View):
                 price_per_gallon = self.price_per_gallon
                 payment_amount = self.payment_amount
                 payer_id = self.payer_id
-
-                record_fill(conn, user_id, user_name, car_name, 10, price_per_gallon, payment_amount, payer_id) # Assume 10 gallons, adjust as needed. Payment recorded.
+                timestamp_iso = datetime.datetime.now().isoformat()
+                record_fill(conn, user_id, user_name, car_name, 10, price_per_gallon, payment_amount, timestamp_iso, payer_id) # Assume 10 gallons, adjust as needed. Payment recorded.
 
 
                 if payer_id:
@@ -541,3 +548,4 @@ async def main():
 # --- Run the Bot ---
 if __name__ == "__main__":
     asyncio.run(main())
+    
