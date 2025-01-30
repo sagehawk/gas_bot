@@ -239,13 +239,14 @@ def get_car_data(conn):
         car_data[row[0]] = {"cost_per_mile": row[1], "near_empty": row[2]}
     return car_data
 
+
 # --- Bot Commands ---
 class CarDropdown(discord.ui.Select):
     def __init__(self, cars):
         options = [discord.SelectOption(label=car["name"], value=car["name"]) for car in cars]
         super().__init__(placeholder="Choose a car...", min_values=1, max_values=1, options=options)
 
-        async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction):
         self.view.selected_car = self.values[0]
         self.view.interaction_ref = interaction  # Store interaction for later use
         if isinstance(self.view, DroveView): # Handle DroveView specific logic
@@ -325,6 +326,7 @@ class CarDropdown(discord.ui.Select):
                 logger.error(f"Error in /filled command: {e}", exc_info=True)
                 await interaction.followup.send("An error occurred while recording the gas fill-up.", ephemeral=True) # Send error as followup
 
+
 class DroveView(discord.ui.View):
     def __init__(self, distance, cars):
         super().__init__()
@@ -336,7 +338,7 @@ class DroveView(discord.ui.View):
 
     @discord.ui.button(label="Near Empty", style=discord.ButtonStyle.secondary)
     async def near_empty_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer() # Defer the interaction
+        await interaction.response.defer() #Defer response
         self.near_empty = not self.near_empty # Toggle near_empty
         if self.near_empty:
             button.style = discord.ButtonStyle.danger # Change style to indicate active
