@@ -245,7 +245,7 @@ class CarDropdown(discord.ui.Select):
         options = [discord.SelectOption(label=car["name"], value=car["name"]) for car in cars]
         super().__init__(placeholder="Choose a car...", min_values=1, max_values=1, options=options)
 
-    async def callback(self, interaction: discord.Interaction):
+        async def callback(self, interaction: discord.Interaction):
         self.view.selected_car = self.values[0]
         self.view.interaction_ref = interaction  # Store interaction for later use
         if isinstance(self.view, DroveView): # Handle DroveView specific logic
@@ -336,6 +336,7 @@ class DroveView(discord.ui.View):
 
     @discord.ui.button(label="Near Empty", style=discord.ButtonStyle.secondary)
     async def near_empty_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer() # Defer the interaction
         self.near_empty = not self.near_empty # Toggle near_empty
         if self.near_empty:
             button.style = discord.ButtonStyle.danger # Change style to indicate active
