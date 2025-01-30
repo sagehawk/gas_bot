@@ -54,10 +54,10 @@ def format_balance_message(users_with_miles, car_data, interaction):
     # Nickname mapping
     nickname_mapping = {
         "513552727096164378": "Sajjad", #oneofzero
-        "1086402596332883978": "Abbas", #mrmario
-        "434171817517778965": "Jafar", #agakatulu
-        "258051981868912640": "Ali", #Agent
-        "1034247813796782130": "Mosa", #Yoshisaki
+        "858864178962235393": "Abbas", #mrmario
+        "758778170421018674": "Jafar", #agakatulu
+        "393241098002235392": "Ali", #Agent
+        "838206242127085629": "Mosa", #Yoshisaki
     }
 
     message += "### Current Amounts Owed\n"
