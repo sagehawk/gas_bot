@@ -69,7 +69,7 @@ def format_balance_message(users_with_miles, car_data, interaction):
            message += f"{nickname}: ${user_data['total_owed']:.2f}\n"
     message += "```\n"
 
-    message += "### Cost per mile\n"
+    message += "### Cost Per Mile\n"
     message += "```\n"
     for car_name, car_info in car_data.items():
         message += f"{car_name}: ${car_info['cost_per_mile']:.2f}"
@@ -78,7 +78,9 @@ def format_balance_message(users_with_miles, car_data, interaction):
         message += "\n"
     message += "```\n"
 
+
     return message
+
 
 def format_car_usage_message(users_with_miles):
     message = "### User Car Usage\n"
