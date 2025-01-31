@@ -69,22 +69,13 @@ def format_balance_message(users_with_miles, car_data, interaction):
            message += f"{nickname}: ${user_data['total_owed']:.2f}\n"
     message += "```\n"
 
-    message += "### Car Status and Costs\n"
+    message += "### Cost per mile\n"
     message += "```\n"
     for car_name, car_info in car_data.items():
-        message += f"{car_name}: Cost/Mile: ${car_info['cost_per_mile']:.2f}"
+        message += f"{car_name}: ${car_info['cost_per_mile']:.2f}"
         if car_info['near_empty']:
              message += " (Near Empty)"
         message += "\n"
-    message += "```\n"
-
-    message += "### Total Miles Driven by User\n"
-    message += "```\n"
-    for user_id in nickname_mapping:
-        if user_id in users_with_miles:
-           user_data = users_with_miles[user_id]
-           nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
-           message += f"{nickname}: {user_data['total_miles']:.2f} miles\n"
     message += "```\n"
 
     return message
@@ -107,6 +98,7 @@ def format_car_usage_message(users_with_miles):
             if user_data['car_usage']:
                 for car_usage in user_data['car_usage']:
                     message += f"  > {car_usage['car_name']}: {car_usage['miles']:.2f} miles, ${car_usage['fill_amount']:.2f} in fills\n"
+            message += f"  > Total miles: {user_data['total_miles']:.2f}\n"
             message += "\n"
     return message
 
@@ -541,8 +533,8 @@ This bot helps track gas expenses and calculate how much each user owes.
 *   `/drove` **distance**: Records the miles driven by a user, prompts for car selection and near empty status.
     *   **distance**: The distance driven in miles.
 *   `/balance`: Shows your current balance (how much you owe or are owed) - *ephemeral, only visible to you*.
-*   `/allbalances`: Shows balances of all users, total miles driven, car cost per mile, and car near empty status.
-*   `/car_usage`: Shows car usage data.
+*   `/allbalances`: Shows balances of all users, car cost per mile, and car near empty status.
+*   `/car_usage`: Shows car usage data, including total miles driven.
 *   `/settle`: Resets everyone's balance to zero.
 *   `/help`: Displays this help message.
 
