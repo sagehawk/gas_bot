@@ -129,7 +129,7 @@ This Discord bot helps track shared car gas expenses within a group. It allows u
             u.id, u.name, u.total_owed;
         END;
         $$ LANGUAGE plpgsql;
-
+      ```
        CREATE OR REPLACE PROCEDURE record_drive_func(
             p_user_id BIGINT,
             p_user_name TEXT,
@@ -197,7 +197,7 @@ This Discord bot helps track shared car gas expenses within a group. It allows u
         $$ LANGUAGE plpgsql;
 
        
-        ```
+      ```
     *   **Note the DATABASE_URL** provided by Railway or your database provider. This will be needed.
 
 3.  **Clone the Repository**
