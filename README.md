@@ -5,7 +5,6 @@ This Discord bot helps track shared car gas expenses within a group. It allows u
 ![image](https://github.com/user-attachments/assets/cca9fc07-e1a9-4b9d-b089-997797a890b7)
 
 ## Features
-![image](https://github.com/user-attachments/assets/f549e4da-01c1-45ae-b242-f098eb433880)
 
 *   **Drive Logging:** Records miles driven by each user, associated with a specific car and optional near-empty status.
 ![image](https://github.com/user-attachments/assets/eebf82a3-0077-43ed-a5ea-b923a0e26374)
@@ -21,6 +20,7 @@ This Discord bot helps track shared car gas expenses within a group. It allows u
 *   **Database Persistence:** Utilizes PostgreSQL for storing all information.
 *   **Clear Messages:** The bot automatically deletes messages in the specified channel before showing updated balances.
 *   **Help Command:** Provides easy-to-understand usage instructions.
+![image](https://github.com/user-attachments/assets/f549e4da-01c1-45ae-b242-f098eb433880)
 
 ## Getting Started
 
