@@ -5,9 +5,14 @@ This Discord bot helps track shared car gas expenses within a group. It allows u
 ![image](https://github.com/user-attachments/assets/cca9fc07-e1a9-4b9d-b089-997797a890b7)
 
 ## Features
+![image](https://github.com/user-attachments/assets/f549e4da-01c1-45ae-b242-f098eb433880)
 
 *   **Drive Logging:** Records miles driven by each user, associated with a specific car and optional near-empty status.
+![image](https://github.com/user-attachments/assets/eebf82a3-0077-43ed-a5ea-b923a0e26374)
+
 *   **Gas Fill-Up Recording:** Tracks gas fill-ups, including price per gallon, payment amount, and optionally who paid for the fill.
+![image](https://github.com/user-attachments/assets/70f6cfe5-cc7d-4a38-b40e-da3b347e864c)
+
 *   **Balance Tracking:** Calculates and displays how much each user owes or is owed.
 *   **Individual Balances:** Allows users to check their personal balances (ephemeral).
 *   **Group Balances:** Displays all users' balances with an overview of the car costs.
