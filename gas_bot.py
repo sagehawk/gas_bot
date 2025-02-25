@@ -8,6 +8,7 @@ import json
 import psycopg2
 from psycopg2 import sql
 import logging
+from collections import defaultdict
 
 # --- Configuration ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -61,24 +62,29 @@ def format_balance_message(users_with_miles, car_data, interaction):
         "393241098002235392": "Ali",  # Agent
     }
 
-    message += "### Current Amounts Owed\n"
+    message += "### Car Usage\n"
     message += "```\n"
     for user_id in nickname_mapping: # iterate through user ids in the specified order
         if user_id in users_with_miles:
            user_data = users_with_miles[user_id]
            nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
-           message += f"{nickname}: ${user_data['total_owed']:.2f}\n"
+
+           # Determine most driven car
+           most_driven_car = "N/A"
+           if user_data['car_usage']:
+                most_driven_car = max(user_data['car_usage'], key=lambda x: x['miles'])['car_name']
+
+           message += f"{nickname}: ${user_data['total_owed']:.2f} ({most_driven_car})\n"
     message += "```\n"
 
-    message += "### Cost Per Mile\n"
-    message += "```\n"
-    for car_name, car_info in car_data.items():
-        message += f"{car_name}: ${car_info['cost_per_mile']:.2f}"
-        if car_info['near_empty']:
-             message += " (Near Empty)"
-        message += "\n"
-    message += "```\n"
-
+    # Cars low on gas section
+    cars_low_on_gas = [car_name for car_name, car_info in car_data.items() if car_info['near_empty']]
+    if cars_low_on_gas:
+        message += "### Cars low on gas\n"
+        message += "```\n"
+        for car_name in cars_low_on_gas:
+            message += f"{car_name}\n"
+        message += "```\n"
 
     return message
 
@@ -293,11 +299,15 @@ class CarDropdown(discord.ui.Select):
              # Edit the original ephemeral message to confirm
             await interaction.response.edit_message(content=f"Drive recorded: {self.view.distance} miles in {car_name}.", view=None)
 
+            # --- Public Message ---
+            # Get nickname or fall back to user_name
+            nickname = nickname_mapping.get(user_id, user_name)
+            # Construct public message header
+            public_message_header = f"**{nickname}** used **/drove** with **{car_name}**."
 
             # Send the balance information as a regular message to the channel
-            public_message = format_balance_message(users_with_miles, car_data, interaction)
+            public_message = public_message_header + "\n" + format_balance_message(users_with_miles, car_data, interaction)
             await interaction.channel.send(public_message)
-
 
 
         elif isinstance(self.view, FillView):
@@ -335,6 +345,15 @@ class CarDropdown(discord.ui.Select):
                 message += format_balance_message(users_with_miles, car_data, interaction)
 
                 await interaction.response.edit_message(content=message, view=None) # Edit the ephemeral message to show results and remove view
+                 # --- Public Message ---
+                # Get nickname or fall back to user_name
+                nickname = nickname_mapping.get(user_id, user_name)
+                # Construct public message header
+                public_message_header = f"**{nickname}** used **/filled** with **{car_name}**."
+
+                # Send the balance information as a regular message to the channel
+                public_message = public_message_header + "\n" + format_balance_message(users_with_miles, car_data, interaction)
+                await interaction.channel.send(public_message)
 
             except Exception as e:
                 logger.error(f"Error in /filled command: {e}", exc_info=True)
