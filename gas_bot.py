@@ -30,6 +30,7 @@ CARS = [
     {"name": "Yellow Subaru", "mpg": 20},
     {"name": "Black Subaru", "mpg": 20},
     {"name": "Grey Subaru", "mpg": 20},
+    {"name": "New Black Subaru", "mpg": 20},
 ]
 
 # --- Helper Functions ---
