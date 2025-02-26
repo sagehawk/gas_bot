@@ -283,7 +283,7 @@ class CarDropdown(discord.ui.Select):
                total_owed = user["total_owed"] + cost
                save_user_data(conn, user_id, user_name, total_owed)
                timestamp_iso = datetime.datetime.now().isoformat()
-               record_drive(conn, user_id, user_name, car_name, distance_float, cost, self.view.near_empty, timestamp_iso)
+               record_drive(conn, user_id, user_name, car_id, distance_float, cost, self.view.near_empty, timestamp_iso)
                conn.close()
 
             except ValueError:
