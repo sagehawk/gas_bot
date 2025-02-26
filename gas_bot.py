@@ -62,7 +62,7 @@ def format_balance_message(users_with_miles, car_data, interaction):
         "393241098002235392": "Ali",  # Agent
     }
 
-    message += "### Car Usage & Most Driven\n"
+    message += "### Gas Usage & Most Driven Car\n"
     message += "```\n"
     for user_id in nickname_mapping: # iterate through user ids in the specified order
         if user_id in users_with_miles:
