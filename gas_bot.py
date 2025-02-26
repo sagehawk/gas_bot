@@ -102,7 +102,7 @@ def format_car_usage_message(users_with_miles):
 
     for user_id in nickname_mapping:
         if user_id in users_with_miles:
-            user_data = users_with_miles[user_data]
+            user_data = users_with_miles[user_id]
             nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
             message += f"**{nickname}**:\n"
             if user_data['car_usage']:
