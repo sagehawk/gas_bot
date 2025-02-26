@@ -77,14 +77,15 @@ def format_balance_message(users_with_miles, car_data, interaction):
            message += f"{nickname}: ${user_data['total_owed']:.2f} ({most_driven_car})\n"
     message += "```\n"
 
-    # Cars low on gas section
-    cars_low_on_gas = [car_name for car_name, car_info in car_data.items() if car_info['near_empty']]
-    if cars_low_on_gas:
-        message += "### Cars low on gas\n"
-        message += "```\n"
-        for car_name in cars_low_on_gas:
-            message += f"{car_name}\n"
-        message += "```\n"
+     # Cars low on gas section + cost per mile
+    message += "### Cost Per Mile\n"
+    message += "```\n"
+    for car_name, car_info in car_data.items():
+        message += f"{car_name}: ${car_info['cost_per_mile']:.2f}"
+        if car_info['near_empty']:
+             message += " (Near Empty)"
+        message += "\n"
+    message += "```\n"
 
     return message
 
@@ -101,7 +102,7 @@ def format_car_usage_message(users_with_miles):
 
     for user_id in nickname_mapping:
         if user_id in users_with_miles:
-            user_data = users_with_miles[user_id]
+            user_data = users_with_miles[user_data]
             nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
             message += f"**{nickname}**:\n"
             if user_data['car_usage']:
@@ -252,20 +253,22 @@ class CarDropdown(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         self.view.selected_car = self.values[0]
         self.view.interaction_ref = interaction  # Store interaction for later use
+        # Nickname mapping
+        nickname_mapping = {
+            "858864178962235393": "Abbas",  # mrmario
+            "513552727096164378": "Sajjad",  # oneofzero
+            "758778170421018674": "Jafar",  # agakatulu
+            "838206242127085629": "Mosa",  # Yoshisaki
+            "393241098002235392": "Ali",  # Agent
+         }
+
         if isinstance(self.view, DroveView): # Handle DroveView specific logic
             conn = get_db_connection()
             user_id = str(interaction.user.id)
             user_name = interaction.user.name
             user = get_or_create_user(conn, user_id, user_name)
 
-            # Nickname mapping
-            nickname_mapping = {
-                "858864178962235393": "Abbas",  # mrmario
-                "513552727096164378": "Sajjad",  # oneofzero
-                "758778170421018674": "Jafar",  # agakatulu
-                "838206242127085629": "Mosa",  # Yoshisaki
-                "393241098002235392": "Ali",  # Agent
-             }
+
             nickname = nickname_mapping.get(user_id, user_name) # Get nickname or fall back to user_name
 
             current_price = get_current_gas_price(conn) # No longer used
@@ -341,15 +344,15 @@ class CarDropdown(discord.ui.Select):
                 car_data = get_car_data(conn)
                 conn.close()
 
+                # Get nickname or fall back to user_name
+                nickname = nickname_mapping.get(user_id, user_name)
+                # Construct public message header
+                public_message_header = f"**{nickname}** used **/filled** with **{car_name}**."
                 message = "Gas fill-up recorded.\n\n"
                 message += format_balance_message(users_with_miles, car_data, interaction)
 
                 await interaction.response.edit_message(content=message, view=None) # Edit the ephemeral message to show results and remove view
                  # --- Public Message ---
-                # Get nickname or fall back to user_name
-                nickname = nickname_mapping.get(user_id, user_name)
-                # Construct public message header
-                public_message_header = f"**{nickname}** used **/filled** with **{car_name}**."
 
                 # Send the balance information as a regular message to the channel
                 public_message = public_message_header + "\n" + format_balance_message(users_with_miles, car_data, interaction)
@@ -369,6 +372,7 @@ class DroveView(discord.ui.View):
         self.distance = distance # Add distance to the view to pass it along
         self.interaction_ref = None
 
+
     @discord.ui.button(label="Near Empty", style=discord.ButtonStyle.secondary)
     async def near_empty_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer() #Defer response
@@ -386,12 +390,22 @@ class FillView(discord.ui.View):
         self.payer_id = payer
         self.interaction_ref = None
 
+
     @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
     async def submit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
       if self.selected_car and self.payment_amount is not None and self.price_per_gallon is not None:
             self.stop() # Stop listening for interactions
             await interaction.response.defer() # Acknowledge, actual response will be sent later
             self.interaction_ref = interaction # Store interaction for later use
+            # Nickname mapping
+            nickname_mapping = {
+            "858864178962235393": "Abbas",  # mrmario
+            "513552727096164378": "Sajjad",  # oneofzero
+            "758778170421018674": "Jafar",  # agakatulu
+            "838206242127085629": "Mosa",  # Yoshisaki
+            "393241098002235392": "Ali",  # Agent
+            }
+
 
             try:
                 conn = get_db_connection()
@@ -431,9 +445,6 @@ class FillView(discord.ui.View):
             except Exception as e:
                 logger.error(f"Error in /filled command: {e}", exc_info=True)
                 await interaction.followup.send("An error occurred while recording the gas fill-up.", ephemeral=True) # Send error as followup
-
-      else:
-            await interaction.response.send_message("Please select a car and enter payment amount and price per gallon.", ephemeral=True)
 
 @client.event
 async def on_ready():
@@ -548,7 +559,7 @@ This bot helps track gas expenses and calculate how much each user owes.
 
 **Commands:**
 
-*   `/filled` **price_per_gallon** **payment_amount** (optional **payer**):  Records gas fill-up, payment, and updates car cost per mile. Prompts for car selection.
+*   `/filled` **price_per_gallon** **payment_amount** (optional **payer**):  Records gas fill-up, payment, and updates gas price. Prompts for car selection.
     *   **price_per_gallon:** The price per gallon.
     *   **payment_amount:** The amount you paid for the fill-up.
     *   **payer:** (Optional) The user who paid for the fill-up.
