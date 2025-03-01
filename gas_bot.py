@@ -328,7 +328,7 @@ class CarDropdown(discord.ui.Select):
                 payment_amount = self.view.payment_amount
                 payer_id = self.view.payer_id
                 timestamp_iso = datetime.datetime.now().isoformat()
-                record_fill(conn, user_id, user_name, car_name, 10, price_per_gallon, payment_amount, timestamp_iso, payer_id) # Assume 10 gallons, adjust as needed. Payment recorded.
+                record_fill(conn, user_id, user_name, car_name, gallons, price_per_gallon, payment_amount, timestamp_iso, payer_id) # Assume 10 gallons, adjust as needed. Payment recorded.
 
                 if payer_id:
                   payer = get_or_create_user(conn, payer_id, user_name)
