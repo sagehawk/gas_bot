@@ -180,7 +180,7 @@ def get_current_gas_price(conn): # No longer used, replaced with car cost per mi
     price = cur.fetchone()
     return price[0] if price else 3.30 # Use default from config if no price in DB
 
-def record_drive(conn, user_id, user_name, car_name, distance, cost, near_empty, timestamp_iso):
+def record_drive(conn, user_id, user_name, car_id, distance, cost, near_empty, timestamp_iso):
     cur = conn.cursor()
     cur.execute("CALL record_drive_func(%s, %s, %s, %s, %s, %s, %s)", (user_id, user_name, car_name, distance, cost, near_empty, timestamp_iso))
     conn.commit()
@@ -274,6 +274,7 @@ class CarDropdown(discord.ui.Select):
             current_price = get_current_gas_price(conn) # No longer used
 
             car_name = self.view.selected_car
+            car_id = get_car_id_from_name(conn, car_name)
             car_data = next((car for car in CARS if car["name"] == self.view.selected_car), None)
 
             try:
