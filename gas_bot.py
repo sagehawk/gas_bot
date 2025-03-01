@@ -183,7 +183,7 @@ def get_current_gas_price(conn): # No longer used, replaced with car cost per mi
 
 def record_drive(conn, user_id, user_name, car_id, distance, cost, near_empty, timestamp_iso):
     cur = conn.cursor()
-    cur.execute("CALL record_drive_func(%s, %s, %s, %s, %s, %s, %s)", (user_id, user_name, car_name, distance, cost, near_empty, timestamp_iso))
+    cur.execute("CALL record_drive_func(%s, %s, %s, %s, %s, %s, %s)", (user_id, user_name, car_id, distance, cost, near_empty, timestamp_iso))
     conn.commit()
 
 def record_fill(conn, user_id, user_name, car_name, amount, price_per_gallon, payment_amount, timestamp_iso, payer_id=None):
