@@ -127,7 +127,8 @@ def initialize_cars_in_db(conn):
 def get_car_id_from_name(conn, car_name):
     cur = conn.cursor()
     cur.execute("SELECT id FROM cars WHERE name = %s", (car_name,))
-    return cur.fetchone()[0] if cur.fetchone() else None
+    result = cur.fetchone()  # Store result in a variable
+    return result[0] if result else None  # Check the stored result
 
 def get_car_name_from_id(conn, car_id):
     cur = conn.cursor()
