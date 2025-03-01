@@ -462,71 +462,71 @@ async def on_ready():
     except Exception as e:
         print(e)
 
-# 1. Update the command definition with ALL parameters
+# 1. Command definition with ALL parameters
 @client.tree.command(name="filled")
 @app_commands.describe(
-    gallons="Number of gallons added",
-    price_per_gallon="Price per gallon",
-    payment_amount="Total amount paid",
-    payer="Optional: User who paid for the fill"
+    gallons="Gallons added",
+    price_per_gallon="Price per gallon ($)",
+    payment_amount="Total payment amount ($)",
+    payer="Who paid for this fill? (optional)"
 )
 async def filled(interaction: discord.Interaction,
-                gallons: float,  # This defines the parameter
+                gallons: float,
                 price_per_gallon: float,
                 payment_amount: float,
                 payer: discord.User = None):
-    """Records a gas fill-up and updates cost calculations"""
+    """Record a gas fill-up and update cost calculations"""
     payer_id = str(payer.id) if payer else None
     
-    # Pass ALL parameters to the view
+    # 2. Pass ALL parameters to the view
     fill_view = FillView(
+        gallons=gallons,
         price_per_gallon=price_per_gallon,
         payment_amount=payment_amount,
-        gallons=gallons,  # Pass gallons here
         cars=CARS,
         payer_id=payer_id
     )
     
     await interaction.response.send_message(
-        "Which car did you fill up?",
+        "Select the car you filled up:",
         view=fill_view,
         ephemeral=True
     )
 
-# 2. Update FillView to store ALL parameters
+# 3. Updated FillView class
 class FillView(discord.ui.View):
-    def __init__(self, price_per_gallon, payment_amount, gallons, cars, payer_id):
+    def __init__(self, gallons, price_per_gallon, payment_amount, cars, payer_id):
         super().__init__()
+        self.gallons = gallons  # Store as instance variable
         self.price_per_gallon = price_per_gallon
         self.payment_amount = payment_amount
-        self.gallons = gallons  # Store gallons as instance variable
         self.payer_id = payer_id
-        self.add_item(CarDropdown(cars))  # Add dropdown after setting other params
+        self.add_item(CarDropdown(cars))
 
     @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
     async def submit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if hasattr(self, 'selected_car'):
             try:
                 conn = get_db_connection()
-                # Use STORED parameters from the view
+                # 4. Use stored parameters
                 record_fill(
                     conn=conn,
                     user_id=str(interaction.user.id),
                     user_name=interaction.user.name,
                     car_name=self.selected_car,
-                    gallons=self.gallons,  # Use the stored value
+                    gallons=self.gallons,  # Use instance variable
                     price_per_gallon=self.price_per_gallon,
                     payment_amount=self.payment_amount,
                     timestamp_iso=datetime.datetime.now().isoformat(),
                     payer_id=self.payer_id
                 )
                 conn.close()
-                await interaction.response.edit_message(content="Fill recorded successfully!", view=None)
+                await interaction.response.edit_message(content=f"✅ Recorded {self.gallons} gallons in {self.selected_car}!", view=None)
             except Exception as e:
-                logger.error(f"Fill error: {e}")
-                await interaction.followup.send("Failed to record fill", ephemeral=True)
+                logger.error(f"Fill error: {e}", exc_info=True)
+                await interaction.response.send_message("❌ Failed to record fill. Please try again.", ephemeral=True)
         else:
-            await interaction.response.send_message("Please select a car first!", ephemeral=True)
+            await interaction.response.send_message("⚠️ Please select a car first!", ephemeral=True)
             
 @client.tree.command(name="drove")
 @app_commands.describe(distance="Distance driven in miles")
