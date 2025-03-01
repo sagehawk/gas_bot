@@ -463,12 +463,46 @@ async def on_ready():
         print(e)
 
 @client.tree.command(name="filled")
-@app_commands.describe(price_per_gallon="Price per gallon", payment_amount="Amount paid for fill", payer="Optional: User who paid for the fill")
-async def filled(interaction: discord.Interaction, price_per_gallon: float, payment_amount: float, payer: discord.User = None):
+@app_commands.describe(
+    gallons="Gallons added",
+    price_per_gallon="Price per gallon",
+    payment_amount="Amount paid",
+    payer="Optional: User who paid"
+)
+async def filled(interaction: discord.Interaction, 
+                gallons: float,  # Now properly defined
+                price_per_gallon: float, 
+                payment_amount: float, 
+                payer: discord.User = None):
     """Records gas fill-up, payment, and updates gas price."""
     payer_id = str(payer.id) if payer else None
-    fill_view = FillView(price_per_gallon, payment_amount, CARS, payer_id)
+    fill_view = FillView(price_per_gallon, payment_amount, CARS, payer_id, gallons)  # Pass gallons
     await interaction.response.send_message("Which car did you fill up?", view=fill_view, ephemeral=True)
+
+class FillView(discord.ui.View):
+    def __init__(self, price_per_gallon, payment_amount, cars, payer_id, gallons):  # Add gallons
+        super().__init__()
+        self.add_item(CarDropdown(cars))
+        self.payment_amount = payment_amount
+        self.price_per_gallon = price_per_gallon
+        self.payer_id = payer_id
+        self.gallons = gallons  # Store gallons
+
+    @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
+    async def submit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.selected_car:
+            try:
+                conn = get_db_connection()
+                # Use self.gallons instead of hardcoded 10
+                record_fill(conn, str(interaction.user.id), interaction.user.name, 
+                           self.selected_car, self.gallons, self.price_per_gallon,
+                           self.payment_amount, datetime.datetime.now().isoformat(), 
+                           self.payer_id)
+                conn.close()
+                await interaction.response.edit_message(content="Fill recorded!", view=None)
+            except Exception as e:
+                logger.error(f"Fill error: {e}")
+                await interaction.followup.send("Error recording fill", ephemeral=True)
 
 @client.tree.command(name="drove")
 @app_commands.describe(distance="Distance driven in miles")
