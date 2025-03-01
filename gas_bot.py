@@ -159,7 +159,7 @@ def get_all_users_with_miles(conn):
           "name": row[1],
           "total_owed": row[2],
           "total_miles": row[3],
-          "car_usage": json.loads(row[4]) if row[4] else {}
+          "car_usage": row[4] if row[4] else []
       }
     return users_data
 
