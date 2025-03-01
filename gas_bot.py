@@ -188,7 +188,9 @@ def record_drive(conn, user_id, user_name, car_id, distance, cost, near_empty, t
 
 def record_fill(conn, user_id, user_name, car_name, amount, price_per_gallon, payment_amount, timestamp_iso, payer_id=None):
     cur = conn.cursor()
-    cur.execute("CALL record_fill_func(%s, %s, %s, %s, %s, %s, %s, %s)", (user_id, user_name, car_name, amount, price_per_gallon, payment_amount, timestamp_iso, payer_id))
+    cur.execute("CALL record_fill_func(%s, %s, %s, %s, %s, %s, %s, %s)", 
+               (user_id, user_name, car_name, amount, price_per_gallon, 
+                payment_amount, timestamp_iso, payer_id))
     conn.commit()
 
 def get_user_drive_history(conn, user_id, limit=5): # No longer used
