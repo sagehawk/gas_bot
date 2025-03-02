@@ -408,8 +408,8 @@ class CarDropdownFill(discord.ui.Select):
                 user_id=user_id,
                 user_name=user_name,
                 car_name=self.view.selected_car,
-                gallons=self.view.gallons,
-                price_per_gallon=self.view.price,
+                gallons=0, #Dummy Value
+                price_per_gallon=0, #Dummy Value
                 payment_amount=self.view.payment,
                 timestamp_iso=datetime.datetime.now().isoformat(),
                 payer_id=self.view.payer
@@ -423,6 +423,9 @@ class CarDropdownFill(discord.ui.Select):
             message = "Gas fill-up recorded.\n\n"
             message += format_balance_message(users_with_miles, interaction)
 
+            # Add timestamp to force Discord refresh
+            message += f"\n(Updated: {time.time()}-{random.randint(100, 999)})"
+
             # Send the message to the channel
             await interaction.channel.send(message)
 
@@ -434,10 +437,10 @@ class CarDropdownFill(discord.ui.Select):
             await interaction.followup.send("❌ Failed to record fill", ephemeral=True)
 
 class FillView(discord.ui.View):
-    def __init__(self, gallons, price, payment, payer):
+    def __init__(self, payment, payer):
         super().__init__()
-        self.gallons = gallons
-        self.price = price
+        self.gallons = 0 # Dummy value
+        self.price = 0 # Dummy value
         self.payment = payment
         self.payer = payer
         self.selected_car = None  # Initialize selected_car
@@ -464,20 +467,16 @@ async def on_ready():
 
 @client.tree.command(name="filled")
 @app_commands.describe(
-    gallons="Gallons added",
-    price="Price per gallon",
     payment="Total payment amount",
     payer="Who paid? (optional)"
 )
 async def filled(interaction: discord.Interaction,
-                gallons: float,
-                price: float,
                 payment: float,
                 payer: discord.User = None):
 
     fill_view = FillView(
-        gallons=gallons,
-        price=price,
+        gallons=0,  # Dummy value
+        price=0, # Dummy Value
         payment=payment,
         payer=str(payer.id) if payer else None
     )
