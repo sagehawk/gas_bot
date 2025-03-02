@@ -25,7 +25,7 @@ intents.members = True
 client = commands.Bot(command_prefix="/", intents=intents)
 
 # --- Logging Setup ---
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 # --- Car Data ---
@@ -490,7 +490,6 @@ async def filled(interaction: discord.Interaction,
 def record_fill(conn, user_id, user_name, car_name, gallons, price_per_gallon,
                payment_amount, timestamp_iso, payer_id=None):
     cur = conn.cursor()
-    logging.debug(f"record_fill: user_id={user_id}, car_name={car_name}, gallons={gallons}, price_per_gallon={price_per_gallon}, payment_amount={payment_amount}, payer_id={payer_id}")
     try:
         cur.execute("CALL record_fill_func(%s, %s, %s, %s, %s, %s, %s, %s)",
                    (user_id, user_name, car_name, float(gallons), float(price_per_gallon),
