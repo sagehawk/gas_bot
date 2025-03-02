@@ -239,10 +239,10 @@ def get_near_empty_cars(conn): # No longer used
 
 def get_car_data(conn):
     cur = conn.cursor()
-    cur.execute("SELECT * FROM get_car_data_func()")
+    cur.execute("SELECT name, notes FROM cars")
     car_data = {}
     for row in cur.fetchall():
-        car_data[row[0]] = {"cost_per_mile": row[1], "near_empty": row[2]}
+        car_data[row[0]] = {"notes": row[1]}
     return car_data
 
 
@@ -254,69 +254,56 @@ class CarDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         self.view.selected_car = self.values[0]
-        self.view.interaction_ref = interaction  # Store interaction for later use
-        # Nickname mapping
-        nickname_mapping = {
-            "858864178962235393": "Abbas",  # mrmario
-            "513552727096164378": "Sajjad",  # oneofzero
-            "758778170421018674": "Jafar",  # agakatulu
-            "838206242127085629": "Mosa",  # Yoshisaki
-            "393241098002235392": "Ali",  # Agent
-         }
+        try:
+            await interaction.response.defer() # Acknowledge the interaction
 
-        if isinstance(self.view, DroveView): # Handle DroveView specific logic
             conn = get_db_connection()
-            user_id = str(interaction.user.id)
-            user_name = interaction.user.name
-            user = get_or_create_user(conn, user_id, user_name)
+            with conn:
+              user_id = str(interaction.user.id)
+              user_name = interaction.user.name
+              car_name = self.view.selected_car #Get car name
+              car_id = get_car_id_from_name(conn, car_name)
+              cur = conn.cursor()
+              with cur:
+                # Update the notes
+                cur.execute("UPDATE cars SET notes = %s WHERE id = %s", (self.view.notes, car_id))
+                conn.commit()
 
+                users_with_miles = get_all_users_with_miles(conn) # Get fresh user data
 
-            nickname = nickname_mapping.get(user_id, user_name) # Get nickname or fall back to user_name
+                # Format the balance message
+                nickname_mapping = {
+                    "858864178962235393": "Abbas",  # mrmario
+                    "513552727096164378": "Sajjad",  # oneofzero
+                    "758778170421018674": "Jafar",  # agakatulu
+                    "838206242127085629": "Mosa",  # Yoshisaki
+                    "393241098002235392": "Ali",  # Agent
+                }
+                nickname = nickname_mapping.get(user_id, user_name)  # Get nickname
+                current_price = get_current_gas_price(conn) # No longer used
+                car_data = next((car for car in CARS if car["name"] == self.view.selected_car), None)
+                mpg = car_data["mpg"] if car_data else 20
+                cost = calculate_cost(float(self.view.distance), mpg, current_price) #No longer used
+                public_message = f"**{nickname}** used **/drove** with **{car_name}** and owes an additional ${cost:.2f}\n" + format_balance_message(users_with_miles, interaction)
 
-            current_price = get_current_gas_price(conn) # No longer used
+                # Send the message to the channel
+                await interaction.channel.send(public_message)
 
-            car_name = self.view.selected_car
-            car_id = get_car_id_from_name(conn, car_name)
-            car_data = next((car for car in CARS if car["name"] == self.view.selected_car), None)
+                #Purging channel
+                if interaction.channel.id == TARGET_CHANNEL_ID:
+                   await interaction.channel.purge(limit=None)
 
-            try:
-               distance_float = float(self.view.distance) # Get distance from view
-               mpg = car_data["mpg"] if car_data else 20
-               cost = calculate_cost(distance_float, mpg, current_price) #No longer used
-               total_owed = user["total_owed"] + cost
-               save_user_data(conn, user_id, user_name, total_owed)
-               timestamp_iso = datetime.datetime.now().isoformat()
-               record_drive(conn, user_id, user_name, car_id, distance_float, cost, self.view.near_empty, timestamp_iso)
-               conn.close()
+                # Optionally, send a confirmation to the user (ephemeral)
+                await interaction.followup.send("✅ Drive recorded and message sent to channel!", ephemeral=True)
 
-            except ValueError:
-                conn.close()
-                await interaction.followup.send(f"The distance value is not a valid number.", ephemeral=True) # Use follow-up here as initial response was deferred
-                return
-            # After processing the drive and purging the channel
-            if interaction.channel.id == TARGET_CHANNEL_ID:
-                await interaction.channel.purge(limit=None)
-            
-            conn = get_db_connection()
-            users_with_miles = get_all_users_with_miles(conn) # Get fresh user data
-            car_data = get_car_data(conn)
-            conn.close()
-            
-            # --- Public Message ---
-            # Get nickname or fall back to user_name
-            nickname = nickname_mapping.get(user_id, user_name)
-            # Construct public message header
-            public_message_header = f"**{nickname}** used **/drove** with **{car_name}**."
-            
-            # Send the balance information as a regular message to the channel
-            public_message = f"**{nickname}** used **/drove** with **{car_name}** and owes an additional ${cost:.2f} \n" + format_balance_message(users_with_miles, interaction) #Updated message
-            await interaction.channel.send(public_message)
-
+        except Exception as e:
+            logger.error(f"Fill error: {e}")
+            await interaction.followup.send("❌ Failed to record fill", ephemeral=True)
 
 class DroveView(discord.ui.View):
     def __init__(self, distance, cars, notes=None):
         super().__init__()
-        self.add_item(CarDropdownDrive(cars))  # Use CarDropdownDrive
+        self.add_item(CarDropdown(cars))
         self.selected_car = None
         self.distance = distance
         self.notes = notes
@@ -327,7 +314,7 @@ class DroveView(discord.ui.View):
             return False
         return True
 
-class CarDropdownDrive(discord.ui.Select): # New class for /drove
+class CarDropdownFill(discord.ui.Select):
     def __init__(self, cars):
         options = [discord.SelectOption(label=car["name"]) for car in cars]
         super().__init__(placeholder="Choose a car...", options=options)
@@ -335,22 +322,30 @@ class CarDropdownDrive(discord.ui.Select): # New class for /drove
     async def callback(self, interaction: discord.Interaction):
         self.view.selected_car = self.values[0]
         try:
-            await interaction.response.defer() # Acknowledge the interaction
+            await interaction.response.defer()  # Acknowledge the interaction
 
             conn = get_db_connection()
             user_id = str(interaction.user.id)
             user_name = interaction.user.name
-            car_name = self.view.selected_car #Get car name
-            car_id = get_car_id_from_name(conn, car_name)
+            car_name = self.view.selected_car  # Get car name
+            payment_amount = self.view.payment  # Get payment amount
+            with conn:
+              cur = conn.cursor()
+              with cur:
+                record_fill(
+                    conn=conn,
+                    user_id=user_id,
+                    user_name=user_name,
+                    car_name=car_name,
+                    gallons=0,  # Dummy Value
+                    price_per_gallon=0,  # Dummy Value
+                    payment_amount=self.view.payment,
+                    timestamp_iso=datetime.datetime.now().isoformat(),
+                    payer_id=self.view.payer
+                )
 
-            # Update the notes
-            cur = conn.cursor()
-            cur.execute("UPDATE cars SET notes = %s WHERE id = %s", (self.view.notes, car_id))
-            conn.commit()
-            conn.close()
-
-            conn = get_db_connection()
-            users_with_miles = get_all_users_with_miles(conn) # Get fresh user data
+            # Retrieve fresh data
+            users_with_miles = get_all_users_with_miles(conn)
             conn.close()
 
             # Format the balance message
@@ -362,18 +357,16 @@ class CarDropdownDrive(discord.ui.Select): # New class for /drove
                 "393241098002235392": "Ali",  # Agent
             }
             nickname = nickname_mapping.get(user_id, user_name)  # Get nickname
-            current_price = get_current_gas_price(conn) # No longer used
-            car_data = next((car for car in CARS if car["name"] == self.view.selected_car), None)
-            mpg = car_data["mpg"] if car_data else 20
-            cost = calculate_cost(float(self.view.distance), mpg, current_price) #No longer used
-            public_message = f"**{nickname}** used **/drove** with **{car_name}** and owes an additional ${cost:.2f}\n" + format_balance_message(users_with_miles, interaction)
+
+            message = f"{nickname} filled the {car_name} and paid ${payment_amount:.2f}.\n\n"  # Updated Message
+            message += format_balance_message(users_with_miles, interaction)
+
+            # Purging channel
+            if interaction.channel.id == TARGET_CHANNEL_ID:
+                await interaction.channel.purge(limit=None)
 
             # Send the message to the channel
-            await interaction.channel.send(public_message)
-
-            #Purging channel
-            if interaction.channel.id == TARGET_CHANNEL_ID:
-               await interaction.channel.purge(limit=None)
+            await interaction.channel.send(message)
 
             # Optionally, send a confirmation to the user (ephemeral)
             await interaction.followup.send("✅ Fill recorded and message sent to channel!", ephemeral=True)
@@ -381,6 +374,7 @@ class CarDropdownDrive(discord.ui.Select): # New class for /drove
         except Exception as e:
             logger.error(f"Fill error: {e}")
             await interaction.followup.send("❌ Failed to record fill", ephemeral=True)
+
 
 class FillView(discord.ui.View):
     def __init__(self, payment, payer):
@@ -392,11 +386,6 @@ class FillView(discord.ui.View):
         self.selected_car = None  # Initialize selected_car
         self.add_item(CarDropdownFill(CARS))  # Use the new CarDropdownFill class
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != int(interaction.message.interaction.user.id):
-            await interaction.response.send_message("This is not your command!", ephemeral=True)
-            return False
-        return True
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != int(interaction.message.interaction.user.id):
             await interaction.response.send_message("This is not your command!", ephemeral=True)
@@ -469,7 +458,7 @@ async def balance(interaction: discord.Interaction):
         await interaction.response.send_message(f"Your current balance: ${user['total_owed']:.2f}", ephemeral=True) #Ephemeral for personal balance
     except Exception as e:
         logger.error(f"Error in /balance command: {e}", exc_info=True)
-    await interaction.response.send_message("An error occurred while retrieving your balance.", ephemeral=True)
+        await interaction.response.send_message("An error occurred while retrieving your balance.", ephemeral=True)
 
 @client.tree.command(name="allbalances")
 async def allbalances(interaction: discord.Interaction):
@@ -492,12 +481,12 @@ async def car_usage(interaction: discord.Interaction):
     """Displays car usage data."""
     await interaction.response.defer()  # Defer response as it might take longer
     try:
-        conn = get_db_connection()
-        users_with_miles = get_all_users_with_miles(conn)
-        conn.close()
+      conn = get_db_connection()
+      users_with_miles = get_all_users_with_miles(conn)
+      conn.close()
 
-        message = format_car_usage_message(users_with_miles)
-        await interaction.followup.send(message)
+      message = format_car_usage_message(users_with_miles)
+      await interaction.followup.send(message)
     except Exception as e:
         logger.error(f"Error in /car_usage command: {e}", exc_info=True)
         await interaction.followup.send("An error occurred while displaying car usage.", ephemeral=True)
