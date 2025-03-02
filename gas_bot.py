@@ -9,6 +9,8 @@ import psycopg2
 from psycopg2 import sql
 import logging
 from collections import defaultdict
+import time
+import random
 
 # --- Configuration ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -92,6 +94,7 @@ def format_balance_message(users_with_miles, interaction):
         message += "\n"
     message += "```\n"
 
+    message += f"\n(Updated: {time.time()}-{random.randint(100, 999)})"  # Add this line here
     return message
 
 
@@ -396,6 +399,8 @@ class CarDropdownFill(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         self.view.selected_car = self.values[0]
         try:
+            await interaction.response.defer()  # Acknowledge the interaction
+
             conn = get_db_connection()
             user_id = str(interaction.user.id)
             user_name = interaction.user.name
@@ -419,10 +424,12 @@ class CarDropdownFill(discord.ui.Select):
             message = "Gas fill-up recorded.\n\n"
             message += format_balance_message(users_with_miles, interaction)
 
-            await interaction.response.edit_message(
-                content=message,
-                view=None
-            )
+            # Send the message to the channel
+            await interaction.channel.send(message)
+
+            # Optionally, send a confirmation to the user (ephemeral)
+            await interaction.followup.send("✅ Fill recorded and message sent to channel!", ephemeral=True)
+
         except Exception as e:
             logger.error(f"Fill error: {e}")
             await interaction.followup.send("❌ Failed to record fill", ephemeral=True)
