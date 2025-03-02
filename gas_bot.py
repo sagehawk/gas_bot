@@ -64,7 +64,7 @@ def format_balance_message(users_with_miles, interaction):
         "393241098002235392": "Ali",  # Agent
     }
 
-    message += "### Gas Usage & Most Driven Car (Last 30 Days)\n" #Updated title
+    message += "### Gas Usage & Most Driven Car\n" #Updated title
     message += "```\n"
     for user_id in nickname_mapping: # iterate through user ids in the specified order
         if user_id in users_with_miles:
@@ -284,7 +284,7 @@ class CarDropdown(discord.ui.Select):
                 car_data = next((car for car in CARS if car["name"] == self.view.selected_car), None)
                 mpg = car_data["mpg"] if car_data else 20
                 cost = calculate_cost(float(self.view.distance), mpg, current_price) #No longer used
-                public_message = f"**{nickname}** used **/drove** with **{car_name}** and owes an additional ${cost:.2f}\n" + format_balance_message(users_with_miles, interaction)
+                public_message = f"**{nickname}** Drove **{car_name}**, Trip Cost: ${cost:.2f}\n" + format_balance_message(users_with_miles, interaction)
 
                 # Send the message to the channel
                 await interaction.channel.send(public_message)
