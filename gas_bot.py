@@ -477,7 +477,7 @@ async def balance(interaction: discord.Interaction):
         await interaction.response.send_message(f"Your current balance: ${user['total_owed']:.2f}", ephemeral=True) #Ephemeral for personal balance
     except Exception as e:
         logger.error(f"Error in /balance command: {e}", exc_info=True)
-        await interaction.response.send_message("An error occurred while retrieving your balance.", ephemeral=True)
+    await interaction.response.send_message("An error occurred while retrieving your balance.", ephemeral=True)
 
 @client.tree.command(name="allbalances")
 async def allbalances(interaction: discord.Interaction):
