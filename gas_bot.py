@@ -316,19 +316,10 @@ class CarDropdown(discord.ui.Select):
 class DroveView(discord.ui.View):
     def __init__(self, distance, cars, notes=None):
         super().__init__()
-        self.add_item(CarDropdown(cars))
+        self.add_item(CarDropdownDrive(cars))  # Use CarDropdownDrive
         self.selected_car = None
-        self.near_empty = False  # Initialize near_empty as False
-        self.distance = distance  # Add distance to the view to pass it along
-        self.interaction_ref = None
+        self.distance = distance
         self.notes = notes
-
-    @discord.ui.button(label="Near Empty", style=discord.ButtonStyle.secondary)
-    async def near_empty_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()  # Defer response
-        self.near_empty = not self.near_empty  # Toggle near_empty
-        button.style = discord.ButtonStyle.danger if self.near_empty else discord.ButtonStyle.secondary
-        await interaction.edit_original_response(view=self)  # Update the view to reflect button change
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != int(interaction.message.interaction.user.id):
@@ -336,7 +327,7 @@ class DroveView(discord.ui.View):
             return False
         return True
 
-class CarDropdown(discord.ui.Select):
+class CarDropdownDrive(discord.ui.Select): # New class for /drove
     def __init__(self, cars):
         options = [discord.SelectOption(label=car["name"]) for car in cars]
         super().__init__(placeholder="Choose a car...", options=options)
@@ -351,16 +342,11 @@ class CarDropdown(discord.ui.Select):
             user_name = interaction.user.name
             car_name = self.view.selected_car #Get car name
             car_id = get_car_id_from_name(conn, car_name)
-            
+
             # Update the notes
-            if self.view.notes:
-                cur = conn.cursor()
-                cur.execute("UPDATE cars SET notes = %s WHERE id = %s", (self.view.notes, car_id))
-                conn.commit()
-            else:
-                cur = conn.cursor()
-                cur.execute("UPDATE cars SET notes = '' WHERE id = %s", (car_id,))
-                conn.commit()
+            cur = conn.cursor()
+            cur.execute("UPDATE cars SET notes = %s WHERE id = %s", (self.view.notes, car_id))
+            conn.commit()
             conn.close()
 
             conn = get_db_connection()
@@ -376,8 +362,6 @@ class CarDropdown(discord.ui.Select):
                 "393241098002235392": "Ali",  # Agent
             }
             nickname = nickname_mapping.get(user_id, user_name)  # Get nickname
-
-            # Construct public message header
             current_price = get_current_gas_price(conn) # No longer used
             car_data = next((car for car in CARS if car["name"] == self.view.selected_car), None)
             mpg = car_data["mpg"] if car_data else 20
@@ -397,7 +381,6 @@ class CarDropdown(discord.ui.Select):
         except Exception as e:
             logger.error(f"Fill error: {e}")
             await interaction.followup.send("❌ Failed to record fill", ephemeral=True)
-
 
 class FillView(discord.ui.View):
     def __init__(self, payment, payer):
@@ -472,7 +455,7 @@ def record_fill(conn, user_id, user_name, car_name, gallons, price_per_gallon,
 async def drove(interaction: discord.Interaction, distance: str, notes: str = None):
     """Logs miles driven and calculates cost using the current gas price, deletes all messages then provides the balance"""
     view = DroveView(distance, CARS, notes)
-    await interaction.response.send_message("Which car did you drive and were you near empty?", view=view, ephemeral=True)
+    await interaction.response.send_message("Which car did you drive?", view=view, ephemeral=True)
 
 @client.tree.command(name="balance")
 async def balance(interaction: discord.Interaction):
