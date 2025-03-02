@@ -462,71 +462,89 @@ async def on_ready():
     except Exception as e:
         print(e)
 
-# 1. Command definition with ALL parameters
+# 1. CORRECT COMMAND DEFINITION
 @client.tree.command(name="filled")
 @app_commands.describe(
-    gallons="Gallons added",
+    gallons="Gallons of gas added",
     price_per_gallon="Price per gallon ($)",
-    payment_amount="Total payment amount ($)",
-    payer="Who paid for this fill? (optional)"
+    payment_amount="Total amount paid ($)",
+    payer="Who paid? (optional)"
 )
 async def filled(interaction: discord.Interaction,
                 gallons: float,
                 price_per_gallon: float,
                 payment_amount: float,
                 payer: discord.User = None):
-    """Record a gas fill-up and update cost calculations"""
+    """Records a gas fill-up and updates car costs"""
     payer_id = str(payer.id) if payer else None
     
-    # 2. Pass ALL parameters to the view
+    # 2. PROPER VIEW INITIALIZATION
     fill_view = FillView(
         gallons=gallons,
-        price_per_gallon=price_per_gallon,
-        payment_amount=payment_amount,
-        cars=CARS,
-        payer_id=payer_id
+        price=price_per_gallon,
+        payment=payment_amount,
+        payer=payer_id,
+        cars=CARS
     )
     
     await interaction.response.send_message(
-        "Select the car you filled up:",
+        "Select the car you filled:",
         view=fill_view,
         ephemeral=True
     )
 
-# 3. Updated FillView class
+# 3. FIXED VIEW CLASS
 class FillView(discord.ui.View):
-    def __init__(self, gallons, price_per_gallon, payment_amount, cars, payer_id):
+    def __init__(self, gallons, price, payment, payer, cars):
         super().__init__()
         self.gallons = gallons  # Store as instance variable
-        self.price_per_gallon = price_per_gallon
-        self.payment_amount = payment_amount
-        self.payer_id = payer_id
-        self.add_item(CarDropdown(cars))
+        self.price = price
+        self.payment = payment
+        self.payer = payer
+        self.add_item(CarDropdown(cars))  # Add dropdown after params
 
-    @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
-    async def submit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if hasattr(self, 'selected_car'):
-            try:
-                conn = get_db_connection()
-                # 4. Use stored parameters
-                record_fill(
-                    conn=conn,
-                    user_id=str(interaction.user.id),
-                    user_name=interaction.user.name,
-                    car_name=self.selected_car,
-                    gallons=self.gallons,  # Use instance variable
-                    price_per_gallon=self.price_per_gallon,
-                    payment_amount=self.payment_amount,
-                    timestamp_iso=datetime.datetime.now().isoformat(),
-                    payer_id=self.payer_id
-                )
-                conn.close()
-                await interaction.response.edit_message(content=f"✅ Recorded {self.gallons} gallons in {self.selected_car}!", view=None)
-            except Exception as e:
-                logger.error(f"Fill error: {e}", exc_info=True)
-                await interaction.response.send_message("❌ Failed to record fill. Please try again.", ephemeral=True)
-        else:
-            await interaction.response.send_message("⚠️ Please select a car first!", ephemeral=True)
+    @discord.ui.button(label="Submit", style=discord.ButtonStyle.green)
+    async def submit_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not hasattr(self, 'selected_car'):
+            return await interaction.response.send_message("Please select a car first!", ephemeral=True)
+            
+        try:
+            conn = get_db_connection()
+            # 4. PROPER PARAMETER USAGE
+            record_fill(
+                conn=conn,
+                user_id=str(interaction.user.id),
+                user_name=interaction.user.name,
+                car_name=self.selected_car,
+                gallons=self.gallons,  # Use stored value
+                price_per_gallon=self.price,
+                payment_amount=self.payment,
+                timestamp_iso=datetime.datetime.now().isoformat(),
+                payer_id=self.payer
+            )
+            conn.close()
+            
+            # 5. CORRECT RESPONSE HANDLING
+            await interaction.response.edit_message(
+                content=f"✅ Added {self.gallons} gallons to {self.selected_car}",
+                view=None
+            )
+            
+        except Exception as e:
+            logger.error(f"Fill error: {e}")
+            await interaction.followup.send(
+                "❌ Failed to record fill. Please try again.",
+                ephemeral=True
+            )
+
+# 6. VERIFY RECORD_FILL FUNCTION
+def record_fill(conn, user_id, user_name, car_name, gallons, price_per_gallon, 
+               payment_amount, timestamp_iso, payer_id=None):
+    cur = conn.cursor()
+    cur.execute("CALL record_fill_func(%s, %s, %s, %s, %s, %s, %s, %s)",
+               (user_id, user_name, car_name, gallons, price_per_gallon,
+                payment_amount, timestamp_iso, payer_id))
+    conn.commit()
             
 @client.tree.command(name="drove")
 @app_commands.describe(distance="Distance driven in miles")
