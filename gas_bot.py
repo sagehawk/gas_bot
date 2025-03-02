@@ -380,7 +380,7 @@ class DroveView(discord.ui.View):
         await interaction.edit_original_response(view=self) # Update the view to reflect button change
 
 
-class CarDropdownFill(discord.ui.Select):  # Renamed to avoid conflict
+class CarDropdownFill(discord.ui.Select):
     def __init__(self, cars):
         options = [discord.SelectOption(label=car["name"]) for car in cars]
         super().__init__(placeholder="Choose a car...", options=options)
@@ -391,16 +391,22 @@ class CarDropdownFill(discord.ui.Select):  # Renamed to avoid conflict
             conn = get_db_connection()
             user_id = str(interaction.user.id)
             user_name = interaction.user.name
+            gallons = self.view.gallons
+            price = self.view.price
+            payment = self.view.payment
+            payer = self.view.payer
+            logging.debug(f"CarDropdownFill callback: selected_car={self.view.selected_car}, gallons={gallons}, price={price}, payment={payment}, payer={payer}")
+
             record_fill(
                 conn=conn,
                 user_id=user_id,
                 user_name=user_name,
                 car_name=self.view.selected_car,
-                gallons=self.view.gallons,
-                price_per_gallon=self.view.price,
-                payment_amount=self.view.payment,
+                gallons=gallons,
+                price_per_gallon=price,
+                payment_amount=payment,
                 timestamp_iso=datetime.datetime.now().isoformat(),
-                payer_id=self.view.payer
+                payer_id=payer
             )
             conn.close()
             await interaction.response.edit_message(
@@ -408,7 +414,7 @@ class CarDropdownFill(discord.ui.Select):  # Renamed to avoid conflict
                 view=None
             )
         except Exception as e:
-            logger.error(f"Fill error: {e}")
+            logging.error(f"Fill error: {e}")
             await interaction.followup.send("❌ Failed to record fill", ephemeral=True)
 
 class FillView(discord.ui.View):
@@ -469,11 +475,15 @@ async def filled(interaction: discord.Interaction,
 def record_fill(conn, user_id, user_name, car_name, gallons, price_per_gallon,
                payment_amount, timestamp_iso, payer_id=None):
     cur = conn.cursor()
-    cur.execute("CALL record_fill_func(%s, %s, %s, %s, %s, %s, %s, %s)",
-               (user_id, user_name, car_name, float(gallons), float(price_per_gallon),
-                float(payment_amount), timestamp_iso, payer_id))  # Explicitly cast to float
-    conn.commit()
-
+    logging.debug(f"record_fill: user_id={user_id}, car_name={car_name}, gallons={gallons}, price_per_gallon={price_per_gallon}, payment_amount={payment_amount}, payer_id={payer_id}")
+    try:
+        cur.execute("CALL record_fill_func(%s, %s, %s, %s, %s, %s, %s, %s)",
+                   (user_id, user_name, car_name, float(gallons), float(price_per_gallon),
+                    float(payment_amount), timestamp_iso, payer_id))
+        conn.commit()
+    except Exception as e:
+        logging.error(f"Error in record_fill: {e}")
+        
 @client.tree.command(name="drove")
 @app_commands.describe(distance="Distance driven in miles")
 async def drove(interaction: discord.Interaction, distance: str):
