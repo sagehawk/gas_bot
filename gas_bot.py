@@ -405,7 +405,7 @@ class FillView(discord.ui.View):
             await interaction.response.send_message("This is not your command!", ephemeral=True)
             return False
         return True
-            async def interaction_check(self, interaction: discord.Interaction) -> bool:
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != int(interaction.message.interaction.user.id):
             await interaction.response.send_message("This is not your command!", ephemeral=True)
             return False
