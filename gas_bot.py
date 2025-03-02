@@ -314,24 +314,29 @@ class CarDropdown(discord.ui.Select):
 
 
 class DroveView(discord.ui.View):
-    def __init__(self, distance, cars):
+    def __init__(self, distance, cars, notes=None):
         super().__init__()
         self.add_item(CarDropdown(cars))
         self.selected_car = None
-        self.near_empty = False # Initialize near_empty as False
-        self.distance = distance # Add distance to the view to pass it along
+        self.near_empty = False  # Initialize near_empty as False
+        self.distance = distance  # Add distance to the view to pass it along
         self.interaction_ref = None
-
+        self.notes = notes
 
     @discord.ui.button(label="Near Empty", style=discord.ButtonStyle.secondary)
     async def near_empty_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer() #Defer response
-        self.near_empty = not self.near_empty # Toggle near_empty
+        await interaction.response.defer()  # Defer response
+        self.near_empty = not self.near_empty  # Toggle near_empty
         button.style = discord.ButtonStyle.danger if self.near_empty else discord.ButtonStyle.secondary
-        await interaction.edit_original_response(view=self) # Update the view to reflect button change
+        await interaction.edit_original_response(view=self)  # Update the view to reflect button change
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != int(interaction.message.interaction.user.id):
+            await interaction.response.send_message("This is not your command!", ephemeral=True)
+            return False
+        return True
 
-class CarDropdownFill(discord.ui.Select):
+class CarDropdown(discord.ui.Select):
     def __init__(self, cars):
         options = [discord.SelectOption(label=car["name"]) for car in cars]
         super().__init__(placeholder="Choose a car...", options=options)
@@ -339,27 +344,27 @@ class CarDropdownFill(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         self.view.selected_car = self.values[0]
         try:
-            await interaction.response.defer()  # Acknowledge the interaction
+            await interaction.response.defer() # Acknowledge the interaction
 
             conn = get_db_connection()
             user_id = str(interaction.user.id)
             user_name = interaction.user.name
             car_name = self.view.selected_car #Get car name
-            payment_amount = self.view.payment  # Get payment amount
-            record_fill(
-                conn=conn,
-                user_id=user_id,
-                user_name=user_name,
-                car_name=car_name,
-                gallons=0,  # Dummy Value
-                price_per_gallon=0,  # Dummy Value
-                payment_amount=self.view.payment,
-                timestamp_iso=datetime.datetime.now().isoformat(),
-                payer_id=self.view.payer
-            )
+            car_id = get_car_id_from_name(conn, car_name)
+            
+            # Update the notes
+            if self.view.notes:
+                cur = conn.cursor()
+                cur.execute("UPDATE cars SET notes = %s WHERE id = %s", (self.view.notes, car_id))
+                conn.commit()
+            else:
+                cur = conn.cursor()
+                cur.execute("UPDATE cars SET notes = '' WHERE id = %s", (car_id,))
+                conn.commit()
+            conn.close()
 
-            # Retrieve fresh data
-            users_with_miles = get_all_users_with_miles(conn)
+            conn = get_db_connection()
+            users_with_miles = get_all_users_with_miles(conn) # Get fresh user data
             conn.close()
 
             # Format the balance message
@@ -372,15 +377,19 @@ class CarDropdownFill(discord.ui.Select):
             }
             nickname = nickname_mapping.get(user_id, user_name)  # Get nickname
 
-            message = f"{nickname} filled the {car_name} and paid ${payment_amount:.2f}.\n\n"  # Updated Message
-            message += format_balance_message(users_with_miles, interaction)
-
-            # Purging channel
-            if interaction.channel.id == TARGET_CHANNEL_ID:
-                await interaction.channel.purge(limit=None)
+            # Construct public message header
+            current_price = get_current_gas_price(conn) # No longer used
+            car_data = next((car for car in CARS if car["name"] == self.view.selected_car), None)
+            mpg = car_data["mpg"] if car_data else 20
+            cost = calculate_cost(float(self.view.distance), mpg, current_price) #No longer used
+            public_message = f"**{nickname}** used **/drove** with **{car_name}** and owes an additional ${cost:.2f}\n" + format_balance_message(users_with_miles, interaction)
 
             # Send the message to the channel
-            await interaction.channel.send(message)
+            await interaction.channel.send(public_message)
+
+            #Purging channel
+            if interaction.channel.id == TARGET_CHANNEL_ID:
+               await interaction.channel.purge(limit=None)
 
             # Optionally, send a confirmation to the user (ephemeral)
             await interaction.followup.send("✅ Fill recorded and message sent to channel!", ephemeral=True)
