@@ -312,7 +312,7 @@ class CarDropdown(discord.ui.Select):
             public_message_header = f"**{nickname}** used **/drove** with **{car_name}**."
 
             # Send the balance information as a regular message to the channel
-            public_message = public_message_header + "\n" + format_balance_message(users_with_miles, car_data, interaction)
+            public_message = public_message_header + "\n" + format_balance_message(users_with_miles, interaction)
             await interaction.channel.send(public_message)
 
 
@@ -353,7 +353,7 @@ class CarDropdown(discord.ui.Select):
                 # Construct public message header
                 public_message_header = f"**{nickname}** used **/filled** with **{car_name}**."
                 message = "Gas fill-up recorded.\n\n"
-                message += format_balance_message(users_with_miles, car_data, interaction)
+                message += format_balance_message(users_with_miles, interaction)
 
                 await interaction.response.edit_message(content=message, view=None) # Edit the ephemeral message to show results and remove view
                  # --- Public Message ---
