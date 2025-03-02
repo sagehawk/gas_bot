@@ -50,7 +50,7 @@ def format_activity_log(records): #Keeping this for now
         log_message += f"{user_name} {record_type} {activity_detail} on {formatted_date}\n"
     return log_message
 
-def format_balance_message(users_with_miles, car_data, interaction):
+def format_balance_message(users_with_miles, interaction):
     message = ""
 
     # Nickname mapping with specified order
@@ -80,6 +80,11 @@ def format_balance_message(users_with_miles, car_data, interaction):
      # Cars low on gas section + cost per mile
     message += "### Cost Per Mile\n"
     message += "```\n"
+    # Get fresh car data from the database
+    conn = get_db_connection()
+    car_data = get_car_data(conn)
+    conn.close()
+
     for car_name, car_info in car_data.items():
         message += f"{car_name}: ${car_info['cost_per_mile']:.2f}"
         if car_info['near_empty']:
