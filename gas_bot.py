@@ -23,7 +23,7 @@ intents.members = True
 client = commands.Bot(command_prefix="/", intents=intents)
 
 # --- Logging Setup ---
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # --- Car Data ---
