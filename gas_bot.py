@@ -470,8 +470,8 @@ def record_fill(conn, user_id, user_name, car_name, gallons, price_per_gallon,
                payment_amount, timestamp_iso, payer_id=None):
     cur = conn.cursor()
     cur.execute("CALL record_fill_func(%s, %s, %s, %s, %s, %s, %s, %s)",
-               (user_id, user_name, car_name, gallons, price_per_gallon,
-                payment_amount, timestamp_iso, payer_id))
+               (user_id, user_name, car_name, float(gallons), float(price_per_gallon),
+                float(payment_amount), timestamp_iso, payer_id))  # Explicitly cast to float
     conn.commit()
 
 @client.tree.command(name="drove")
