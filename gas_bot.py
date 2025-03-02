@@ -95,8 +95,7 @@ def format_balance_message(users_with_miles, interaction):
     message += "```\n"
 
     message += f"\n(Updated: {time.time()}-{random.randint(100, 999)})"  # Add this line here
-    return message
-
+    return message # Move the return statement to the end
 
 def format_car_usage_message(users_with_miles):
     message = "### User Car Usage\n"
