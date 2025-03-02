@@ -88,10 +88,7 @@ def format_balance_message(users_with_miles, interaction):
     conn.close()
 
     for car_name, car_info in car_data.items():
-        message += f"{car_name}: ${car_info['cost_per_mile']:.2f}"
-        if car_info['near_empty']:
-             message += " (Near Empty)"
-        message += "\n"
+        message += f"{car_name}: ${car_info['cost_per_mile']:.2f}\n"
     message += "```\n"
 
     message += f"\n(Updated: {time.time()}-{random.randint(100, 999)})"  # Add this line here
@@ -315,63 +312,6 @@ class CarDropdown(discord.ui.Select):
             await interaction.channel.send(public_message)
 
 
-        elif isinstance(self.view, FillView):
-            try:
-                conn = get_db_connection()
-                user_id = str(interaction.user.id)
-                user_name = interaction.user.name
-                user = get_or_create_user(conn, user_id, user_name)
-                car_name = self.view.selected_car
-                price_per_gallon = self.view.price_per_gallon
-                payment_amount = self.view.payment_amount
-                payer_id = self.view.payer_id
-                timestamp_iso = datetime.datetime.now().isoformat()
-                record_fill(conn, user_id, user_name, car_name, self.view.gallons, price_per_gallon, payment_amount, timestamp_iso, payer_id)
-
-                # Update payer's balance if a payer is specified
-                if payer_id:
-                    payer = get_or_create_user(conn, payer_id, user_name)
-                    total_owed = payer["total_owed"] - payment_amount  # Reduce total owed by payment amount
-                    save_user_data(conn, payer_id, user_name, total_owed)
-                else:
-                    total_owed = user["total_owed"] - payment_amount  # Reduce total owed by payment amount
-                    save_user_data(conn, user_id, user_name, total_owed)
-
-                conn.close()
-
-                if interaction.channel.id == TARGET_CHANNEL_ID:
-                    await interaction.channel.purge(limit=None)
-
-                conn = get_db_connection()
-                users_with_miles = get_all_users_with_miles(conn)
-                car_data = get_car_data(conn)
-                conn.close()
-
-                # Get nickname or fall back to user_name
-                nickname = nickname_mapping.get(user_id, user_name)
-                # Construct public message header
-                public_message_header = f"**{nickname}** used **/filled** with **{car_name}**."
-                message = "Gas fill-up recorded.\n\n"
-                
-                conn = get_db_connection()
-                users_with_miles = get_all_users_with_miles(conn) # Get fresh user data
-                car_data = get_car_data(conn)
-                conn.close()
-                
-                message += format_balance_message(users_with_miles, interaction)
-                
-                await interaction.response.edit_message(content=message, view=None) # Edit the ephemeral message to show results and remove view
-                 # --- Public Message ---
-
-                # Send the balance information as a regular message to the channel
-                public_message = public_message_header + "\n" + format_balance_message(users_with_miles, car_data, interaction)
-                await interaction.channel.send(public_message)
-
-            except Exception as e:
-                logger.error(f"Error in /filled command: {e}", exc_info=True)
-                await interaction.followup.send("An error occurred while recording the gas fill-up.", ephemeral=True) # Send error as followup
-
-
 class DroveView(discord.ui.View):
     def __init__(self, distance, cars):
         super().__init__()
@@ -475,8 +415,6 @@ async def filled(interaction: discord.Interaction,
                 payer: discord.User = None):
 
     fill_view = FillView(
-        gallons=0,  # Dummy value
-        price=0, # Dummy Value
         payment=payment,
         payer=str(payer.id) if payer else None
     )
@@ -490,6 +428,7 @@ async def filled(interaction: discord.Interaction,
 def record_fill(conn, user_id, user_name, car_name, gallons, price_per_gallon,
                payment_amount, timestamp_iso, payer_id=None):
     cur = conn.cursor()
+    logging.debug(f"record_fill: user_id={user_id}, car_name={car_name}, gallons={gallons}, price_per_gallon={price_per_gallon}, payment_amount={payment_amount}, payer_id={payer_id}")
     try:
         cur.execute("CALL record_fill_func(%s, %s, %s, %s, %s, %s, %s, %s)",
                    (user_id, user_name, car_name, float(gallons), float(price_per_gallon),
@@ -526,10 +465,9 @@ async def allbalances(interaction: discord.Interaction):
     try:
         conn = get_db_connection()
         users_with_miles = get_all_users_with_miles(conn)
-        car_data = get_car_data(conn)
         conn.close()
 
-        message = format_balance_message(users_with_miles, car_data, interaction)
+        message = format_balance_message(users_with_miles, interaction)
 
         await interaction.followup.send(message)
     except Exception as e:
@@ -569,11 +507,10 @@ async def settle(interaction: discord.Interaction):
 
         conn = get_db_connection()
         users_with_miles = get_all_users_with_miles(conn)
-        car_data = get_car_data(conn)
         conn.close()
 
         message = "Balances have been settled to zero.\n\n"
-        message += format_balance_message(users_with_miles, car_data, interaction)
+        message += format_balance_message(users_with_miles, interaction)
 
         await interaction.followup.send(message)
 
@@ -591,14 +528,13 @@ This bot helps track gas expenses and calculate how much each user owes.
 
 **Commands:**
 
-*   `/filled` **price_per_gallon** **payment_amount** (optional **payer**):  Records gas fill-up, payment, and updates gas price. Prompts for car selection.
-    *   **price_per_gallon:** The price per gallon.
+*   `/filled` **payment_amount** (optional **payer**):  Records gas fill-up, payment, and sets all cars' cost per mile to 0.16. Prompts for car selection.
     *   **payment_amount:** The amount you paid for the fill-up.
     *   **payer:** (Optional) The user who paid for the fill-up.
-*   `/drove` **distance**: Records the miles driven by a user, prompts for car selection and near empty status.
+*   `/drove` **distance**: Records the miles driven by a user. Prompts for car selection and near empty status.
     *   **distance**: The distance driven in miles.
 *   `/balance`: Shows your current balance (how much you owe or are owed) - *ephemeral, only visible to you*.
-*   `/allbalances`: Shows balances of all users, car cost per mile, and car near empty status.
+*   `/allbalances`: Shows balances of all users, and car cost per mile.
 *   `/car_usage`: Shows car usage data, including total miles driven.
 *   `/settle`: Resets everyone's balance to zero.
 *   `/help`: Displays this help message.
@@ -606,8 +542,8 @@ This bot helps track gas expenses and calculate how much each user owes.
 **Example Usage:**
 
 1. **Record Fill-up & Payment:**
-    `/filled 3.50 35` (Records fill-up with price $3.50/gallon, payment $35, and prompts for car selection)
-    `/filled 3.50 35 payer:@UserName` (Records fill-up with price $3.50/gallon, payment $35, and prompts for car selection, attributing the payment to the specified user)
+    `/filled 35` (Records fill-up with payment $35, and sets all cars' cost per mile to 0.16)
+    `/filled 35 payer:@UserName` (Records fill-up with payment $35, sets all cars' cost per mile to 0.16, and attributes the payment to the specified user)
 2. **Driving:**
      `/drove 50` (Bot will prompt you to select a car and near empty status)
 4. **Check Balance:**
@@ -616,7 +552,7 @@ This bot helps track gas expenses and calculate how much each user owes.
 
 **Important Notes:**
 
-*   Use `/filled` to record fill-ups and payments, and update the car cost per mile.
+*   Use `/filled` to record fill-ups and payments, and set all cars' cost per mile to 0.16.
 *   When using `/drove`, select the car you drove and indicate if it was near empty.
 *   `/settle` resets all balances to zero.
 *   `/balance` is ephemeral and only visible to you for privacy.
