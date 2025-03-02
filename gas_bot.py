@@ -296,21 +296,18 @@ class CarDropdown(discord.ui.Select):
             # After processing the drive and purging the channel
             if interaction.channel.id == TARGET_CHANNEL_ID:
                 await interaction.channel.purge(limit=None)
-
+            
             conn = get_db_connection()
-            users_with_miles = get_all_users_with_miles(conn)
+            users_with_miles = get_all_users_with_miles(conn) # Get fresh user data
             car_data = get_car_data(conn)
             conn.close()
-
-             # Edit the original ephemeral message to confirm
-            await interaction.response.edit_message(content=f"Drive recorded: {self.view.distance} miles in {car_name}.", view=None)
-
+            
             # --- Public Message ---
             # Get nickname or fall back to user_name
             nickname = nickname_mapping.get(user_id, user_name)
             # Construct public message header
             public_message_header = f"**{nickname}** used **/drove** with **{car_name}**."
-
+            
             # Send the balance information as a regular message to the channel
             public_message = public_message_header + "\n" + format_balance_message(users_with_miles, interaction)
             await interaction.channel.send(public_message)
@@ -353,8 +350,14 @@ class CarDropdown(discord.ui.Select):
                 # Construct public message header
                 public_message_header = f"**{nickname}** used **/filled** with **{car_name}**."
                 message = "Gas fill-up recorded.\n\n"
+                
+                conn = get_db_connection()
+                users_with_miles = get_all_users_with_miles(conn) # Get fresh user data
+                car_data = get_car_data(conn)
+                conn.close()
+                
                 message += format_balance_message(users_with_miles, interaction)
-
+                
                 await interaction.response.edit_message(content=message, view=None) # Edit the ephemeral message to show results and remove view
                  # --- Public Message ---
 
