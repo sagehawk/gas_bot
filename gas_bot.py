@@ -399,30 +399,32 @@ class CarDropdownFill(discord.ui.Select):
             conn = get_db_connection()
             user_id = str(interaction.user.id)
             user_name = interaction.user.name
-            gallons = self.view.gallons
-            price = self.view.price
-            payment = self.view.payment
-            payer = self.view.payer
-            logging.debug(f"CarDropdownFill callback: selected_car={self.view.selected_car}, gallons={gallons}, price={price}, payment={payment}, payer={payer}")
-
             record_fill(
                 conn=conn,
                 user_id=user_id,
                 user_name=user_name,
                 car_name=self.view.selected_car,
-                gallons=gallons,
-                price_per_gallon=price,
-                payment_amount=payment,
+                gallons=self.view.gallons,
+                price_per_gallon=self.view.price,
+                payment_amount=self.view.payment,
                 timestamp_iso=datetime.datetime.now().isoformat(),
-                payer_id=payer
+                payer_id=self.view.payer
             )
+
+            # Retrieve fresh data
+            users_with_miles = get_all_users_with_miles(conn)
             conn.close()
+
+            # Format the balance message
+            message = "Gas fill-up recorded.\n\n"
+            message += format_balance_message(users_with_miles, interaction)
+
             await interaction.response.edit_message(
-                content=f"✅ Recorded fill for {self.view.selected_car}",
+                content=message,
                 view=None
             )
         except Exception as e:
-            logging.error(f"Fill error: {e}")
+            logger.error(f"Fill error: {e}")
             await interaction.followup.send("❌ Failed to record fill", ephemeral=True)
 
 class FillView(discord.ui.View):
