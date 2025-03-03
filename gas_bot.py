@@ -249,8 +249,82 @@ class CarDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         self.view.selected_car = self.values[0]
+
+        # Check which view this dropdown is part of
+        if isinstance(self.view, DroveView):  # Handle the /drove command
+            try:
+                await interaction.response.defer()  # Acknowledge the interaction
+
+                conn = get_db_connection()
+                with conn:
+                    user_id = str(interaction.user.id)
+                    user_name = interaction.user.name
+                    car_name = self.view.selected_car  # Get car name
+                    car_id = get_car_id_from_name(conn, car_name)
+                    current_price = get_current_gas_price(conn)  # No longer used
+                    car_data = next(
+                        (car for car in CARS if car["name"] == self.view.selected_car), None
+                    )
+                    mpg = car_data["mpg"] if car_data else 20
+                    cost = calculate_cost(float(self.view.distance), mpg, current_price)  # No longer used
+
+                    record_drive(conn, user_id, user_name, car_id, float(self.view.distance), cost, False,
+                                 datetime.datetime.now().isoformat())
+
+                    users_with_miles = get_all_users_with_miles(conn)  # Get fresh user data
+
+                    # Format the balance message
+                    nickname_mapping = {
+                        "858864178962235393": "Abbas",  # mrmario
+                        "513552727096164378": "Sajjad",  # oneofzero
+                        "758778170421018674": "Jafar",  # agakatulu
+                        "838206242127085629": "Mosa",  # Yoshisaki
+                        "393241098002235392": "Ali",  # Agent
+                    }
+                    nickname = nickname_mapping.get(user_id, user_name)  # Get nickname
+
+                    public_message = f"**{nickname}** Drove **{car_name}**, Trip Cost: ${cost:.2f}\n" + format_balance_message(
+                        users_with_miles, interaction)
+
+                    # Purging channel
+                    if interaction.channel.id == TARGET_CHANNEL_ID:
+                        await interaction.channel.purge(limit=None)
+
+                    # Send the message to the channel
+                    await interaction.channel.send(public_message)
+
+                    # Optionally, send a confirmation to the user (ephemeral)
+                    await interaction.followup.send("✅ Drive recorded and message sent to channel!", ephemeral=True)
+
+            except Exception as e:
+                logger.error(f"Drive error: {e}")
+                await interaction.followup.send("❌ Failed to record drive", ephemeral=True)
+
+        elif isinstance(self.view, NoteView): # Handle the /note command
+             try:
+                 await interaction.response.defer()  # Acknowledge the interaction
+
+                 conn = get_db_connection()
+                 with conn:
+                     user_id = str(interaction.user.id)
+                     user_name = interaction.user.name
+                     car_name = self.view.selected_car  # Get car name
+                     car_id = get_car_id_from_name(conn, car_name)
+                     notes = self.view.notes # Get notes
+
+                     cur = conn.cursor()
+                     with cur:
+                         # Update the notes
+                         cur.execute("UPDATE cars SET notes = %s WHERE id = %s", (notes, car_id))
+                         conn.commit()
+
+                     await interaction.followup.send("✅ Notes updated!", ephemeral=True)
+             except Exception as e:
+                 logger.error(f"Note error: {e}")
+                 await interaction.followup.send("❌ Failed to update notes", ephemeral=True)
+
         try:
-            await interaction.response.defer() # Acknowledge the interaction
+            await interaction.response.defer()  # Acknowledge the interaction
 
             conn = get_db_connection()
             with conn:
@@ -296,12 +370,11 @@ class CarDropdown(discord.ui.Select):
             await interaction.followup.send("❌ Failed to record fill", ephemeral=True)
 
 class DroveView(discord.ui.View):
-    def __init__(self, distance, cars, notes=None):
+    def __init__(self, distance):
         super().__init__()
-        self.add_item(CarDropdown(cars))
+        self.add_item(CarDropdown(CARS))
         self.selected_car = None
         self.distance = distance
-        self.notes = notes
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != int(interaction.message.interaction.user.id):
@@ -387,6 +460,18 @@ class FillView(discord.ui.View):
             return False
         return True
 
+class NoteView(discord.ui.View):
+    def __init__(self, notes):
+        super().__init__()
+        self.add_item(CarDropdown(CARS))
+        self.selected_car = None
+        self.notes = notes
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != int(interaction.message.interaction.user.id):
+            await interaction.response.send_message("This is not your command!", ephemeral=True)
+            return False
+        return True
 
 @client.event
 async def on_ready():
@@ -435,11 +520,19 @@ def record_fill(conn, user_id, user_name, car_name, gallons, price_per_gallon,
 
 
 @client.tree.command(name="drove")
-@app_commands.describe(distance="Distance driven in miles", notes="Any notes about the car")
-async def drove(interaction: discord.Interaction, distance: str, notes: str = None):
+@app_commands.describe(distance="Distance driven in miles")
+async def drove(interaction: discord.Interaction, distance: str):
     """Logs miles driven and calculates cost using the current gas price, deletes all messages then provides the balance"""
-    view = DroveView(distance, CARS, notes)
+    view = DroveView(distance)
     await interaction.response.send_message("Which car did you drive?", view=view, ephemeral=True)
+
+@client.tree.command(name="note")
+@app_commands.describe(notes="Any notes about the car")
+async def note(interaction: discord.Interaction, notes: str):
+    """Sets a note for a specific car."""
+    view = NoteView(notes)
+    await interaction.response.send_message("Which car do you want to add a note to?", view=view, ephemeral=True)
+
 
 @client.tree.command(name="balance")
 async def balance(interaction: discord.Interaction):
@@ -532,9 +625,10 @@ This bot helps track gas expenses and calculate how much each user owes.
 *   `/filled` **payment_amount** (optional **payer**):  Records gas fill-up, payment, and sets all cars' cost per mile to 0.16. Prompts for car selection.
     *   **payment_amount:** The amount you paid for the fill-up.
     *   **payer:** (Optional) The user who paid for the fill-up.
-*   `/drove` **distance** **notes**: Records the miles driven by a user. Prompts for car selection.
+*   `/drove` **distance**: Records the miles driven by a user. Prompts for car selection.
     *   **distance**: The distance driven in miles.
-    *    **notes**: Any notes about the car.
+*   `/note` **notes**: Sets a note for a specific car. Prompts for car selection.
+    *   **notes**: Any notes about the car.
 *   `/balance`: Shows your current balance (how much you owe or are owed) - *ephemeral, only visible to you*.
 *   `/allbalances`: Shows balances of all users, and car notes.
 *   `/car_usage`: Shows car usage data, including total miles driven.
@@ -548,7 +642,8 @@ This bot helps track gas expenses and calculate how much each user owes.
     `/filled 35 payer:@UserName` (Records fill-up with payment $35, sets all cars' cost per mile to 0.16, and attributes the payment to the specified user)
 2. **Driving:**
      `/drove 50` (Bot will prompt you to select a car)
-     `/drove 50 "The car is low on gas"` (Bot will prompt you to select a car, and the note will be added)
+3. **Set Car Note:**
+    `/note "Tires need air"` (Bot will prompt you to select a car)
 4. **Check Balance:**
     `/balance` (Shows your current balance - only visible to you)
     `/allbalances` (Shows all balances and car notes)
@@ -557,6 +652,7 @@ This bot helps track gas expenses and calculate how much each user owes.
 
 *   Use `/filled` to record fill-ups and payments, and set all cars' cost per mile to 0.16.
 *   When using `/drove`, select the car you drove.
+*   Use `/note` to add or update a note for a car.
 *   `/settle` resets all balances to zero.
 *   `/balance` is ephemeral and only visible to you for privacy.
 *   The `payer` argument in `/filled` is optional. If no payer is specified, the user executing the command is assumed to be the payer.
