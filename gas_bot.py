@@ -283,8 +283,7 @@ class CarDropdown(discord.ui.Select):
                     }
                     nickname = nickname_mapping.get(user_id, user_name)  # Get nickname
 
-                    public_message = f"**{nickname}** Drove **{car_name}**, Trip Cost: ${cost:.2f}\n" + format_balance_message(
-                        users_with_miles, interaction)
+                    public_message = f"**{nickname}** Drove **{car_name}**\n"
 
                     # Purging channel
                     if interaction.channel.id == TARGET_CHANNEL_ID:
@@ -299,6 +298,29 @@ class CarDropdown(discord.ui.Select):
             except Exception as e:
                 logger.error(f"Drive error: {e}")
                 await interaction.followup.send("❌ Failed to record drive", ephemeral=True)
+
+        elif isinstance(self.view, NoteView): # Handle the /note command
+             try:
+                 await interaction.response.defer()  # Acknowledge the interaction
+
+                 conn = get_db_connection()
+                 with conn:
+                     user_id = str(interaction.user.id)
+                     user_name = interaction.user.name
+                     car_name = self.view.selected_car  # Get car name
+                     car_id = get_car_id_from_name(conn, car_name)
+                     notes = self.view.notes # Get notes
+
+                     cur = conn.cursor()
+                     with cur:
+                         # Update the notes
+                         cur.execute("UPDATE cars SET notes = %s WHERE id = %s", (notes, car_id))
+                         conn.commit()
+
+                     await interaction.followup.send("✅ Notes updated!", ephemeral=True)
+             except Exception as e:
+                 logger.error(f"Note error: {e}")
+                 await interaction.followup.send("❌ Failed to update notes", ephemeral=True)
 
         elif isinstance(self.view, NoteView): # Handle the /note command
              try:
