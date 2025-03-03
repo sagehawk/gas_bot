@@ -64,19 +64,14 @@ def format_balance_message(users_with_miles, interaction):
         "393241098002235392": "Ali",  # Agent
     }
 
-    message += "### Gas Usage & Most Driven Car\n" #Updated title
+    message += "### Gas Usage\n" #Updated title
     message += "```\n"
     for user_id in nickname_mapping: # iterate through user ids in the specified order
         if user_id in users_with_miles:
            user_data = users_with_miles[user_id]
            nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
 
-           # Determine most driven car
-           most_driven_car = "N/A"
-           if user_data['car_usage']:
-                most_driven_car = max(user_data['car_usage'], key=lambda x: x['miles'])['car_name']
-
-           message += f"{nickname}: ${user_data['total_owed']:.2f} ({most_driven_car})\n"
+           message += f"{nickname}: ${user_data['total_owed']:.2f}\n"
     message += "```\n"
 
      # Cars low on gas section + cost per mile
@@ -286,12 +281,12 @@ class CarDropdown(discord.ui.Select):
                 cost = calculate_cost(float(self.view.distance), mpg, current_price) #No longer used
                 public_message = f"**{nickname}** Drove **{car_name}**, Trip Cost: ${cost:.2f}\n" + format_balance_message(users_with_miles, interaction)
 
-                # Send the message to the channel
-                await interaction.channel.send(public_message)
-
-                #Purging channel
+                # Purging channel
                 if interaction.channel.id == TARGET_CHANNEL_ID:
                    await interaction.channel.purge(limit=None)
+
+                # Send the message to the channel
+                await interaction.channel.send(public_message)
 
                 # Optionally, send a confirmation to the user (ephemeral)
                 await interaction.followup.send("✅ Drive recorded and message sent to channel!", ephemeral=True)
@@ -465,6 +460,10 @@ async def allbalances(interaction: discord.Interaction):
     """Shows the balances of all users."""
     await interaction.response.defer()  # Defer response as it might take longer
     try:
+        # Purging channel
+        if interaction.channel.id == TARGET_CHANNEL_ID:
+            await interaction.channel.purge(limit=None)
+
         conn = get_db_connection()
         users_with_miles = get_all_users_with_miles(conn)
         conn.close()
