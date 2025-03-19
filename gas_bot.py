@@ -29,12 +29,12 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG) # Set logging level to DEBUG for more info
 
-# --- Car Data ---
+--- Car Data ---
 CARS = [
-    {"name": "Yellow Subaru", "mpg": 20},
     {"name": "Black Subaru", "mpg": 20},
     {"name": "Grey Subaru", "mpg": 20},
     {"name": "New Black Subaru", "mpg": 20},
+    {"name": "Mercedes", "mpg": 16},
 ]
 
 # --- Helper Functions ---
@@ -65,18 +65,16 @@ def format_balance_message(users_with_miles, interaction):
         "393241098002235392": "Ali",  # Agent
     }
 
-    message += "### Gas Usage\n" #Updated title
     message += "```\n"
     for user_id in nickname_mapping: # iterate through user ids in the specified order
         if user_id in users_with_miles:
-           user_data = users_with_miles[user_id]
-           nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
+            user_data = users_with_miles[user_id]
+            nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User")) # Get the nickname or default name
 
-           message += f"{nickname}: ${user_data['total_owed']:.2f}\n"
+            message += f"{nickname}: ${user_data['total_owed']:.2f}\n"
     message += "```\n"
 
-     # Cars low on gas section + cost per mile
-    message += "### Car Notes\n"
+    # Cars low on gas section + cost per mile
     message += "```\n"
     # Get fresh car data from the database
     conn = get_db_connection()
@@ -341,7 +339,7 @@ class DroveView(discord.ui.View):
         self.distance = distance
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != int(interaction.message.interaction.user.id):
+        if interaction.user.id != int(interaction.message.interaction_metadata.user.id):
             await interaction.response.send_message("This is not your command!", ephemeral=True)
             return False
         return True
