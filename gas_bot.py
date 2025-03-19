@@ -31,10 +31,11 @@ logger.setLevel(logging.DEBUG) # Set logging level to DEBUG for more info
 
 # --- Car Data ---
 CARS = [
+    {"name": "Yellow Subaru", "mpg": 20},
     {"name": "Black Subaru", "mpg": 20},
     {"name": "Grey Subaru", "mpg": 20},
     {"name": "New Black Subaru", "mpg": 20},
-    {"name": "Mercedes", "mpg": 16},
+    {"name": "Mercedes", "mpg": 17},
 ]
 
 # --- Helper Functions ---
