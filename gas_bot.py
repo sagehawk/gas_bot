@@ -29,7 +29,7 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG) # Set logging level to DEBUG for more info
 
---- Car Data ---
+# --- Car Data ---
 CARS = [
     {"name": "Black Subaru", "mpg": 20},
     {"name": "Grey Subaru", "mpg": 20},
