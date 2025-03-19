@@ -27,6 +27,7 @@ client = commands.Bot(command_prefix="/", intents=intents)
 # --- Logging Setup ---
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG) # Set logging level to DEBUG for more info
 
 # --- Car Data ---
 CARS = [
@@ -360,6 +361,10 @@ class CarDropdownFill(discord.ui.Select):
             user_name = interaction.user.name
             car_name = self.view.selected_car  # Get car name
             payment_amount = self.view.payment  # Get payment amount
+            payer_id = self.view.payer
+
+            logger.debug(f"Fill callback - User ID: {user_id}, User Name: {user_name}, Car Name: {car_name}, Payment: {payment_amount}, Payer ID: {payer_id}") # Log input parameters
+
             with conn:
               cur = conn.cursor()
               with cur:
@@ -372,7 +377,7 @@ class CarDropdownFill(discord.ui.Select):
                     price_per_gallon=0,  # Dummy Value
                     payment_amount=self.view.payment,
                     timestamp_iso=datetime.datetime.now().isoformat(),
-                    payer_id=self.view.payer
+                    payer_id=payer_id
                 )
 
             # Retrieve fresh data
@@ -472,14 +477,15 @@ async def filled(interaction: discord.Interaction,
 def record_fill(conn, user_id, user_name, car_name, gallons, price_per_gallon,
                 payment_amount, timestamp_iso, payer_id=None):
     cur = conn.cursor()
-    logging.debug(f"record_fill: user_id={user_id}, car_name={car_name}, gallons={gallons}, price_per_gallon={price_per_gallon}, payment_amount={payment_amount}, payer_id={payer_id}")
+    logger.debug(f"record_fill: user_id={user_id}, user_name={user_name}, car_name={car_name}, gallons={gallons}, price_per_gallon={price_per_gallon}, payment_amount={payment_amount}, payer_id={payer_id}, timestamp_iso={timestamp_iso}") # Log all parameters
     try:
         cur.execute("CALL record_fill_func(%s, %s, %s, %s, %s, %s, %s, %s)",
                     (user_id, user_name, car_name, float(gallons), float(price_per_gallon),
                      float(payment_amount), timestamp_iso, payer_id))
         conn.commit()
+        logger.debug("record_fill_func executed successfully and committed.") # Log success
     except Exception as e:
-        logging.error(f"Error in record_fill: {e}")
+        logger.error(f"Error in record_fill: {e}")
 
 
 @client.tree.command(name="drove")
