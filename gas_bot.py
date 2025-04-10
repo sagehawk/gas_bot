@@ -1,44 +1,42 @@
+# -*- coding: utf-8 -*-
 import os
 import asyncio
 import discord
 from discord.ext import commands
-from discord import app_commands
+from discord import app_commands # Ensure this is imported
 import datetime
 import json
 import psycopg2
 from psycopg2 import sql
 import logging
-from collections import defaultdict
+from collections import defaultdict # Keep if used elsewhere, maybe not needed now
 import time
 import random
+from typing import Optional # Needed for Optional type hint
 
 # --- Configuration ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 DATABASE_URL = os.environ.get("DATABASE_URL")
-# DATABASE_NAME = "railway" # This wasn't used as DATABASE_URL is primary
 TARGET_CHANNEL_ID = 1319440273868062861 # Make sure this is correct
 
 # --- Bot Setup ---
 intents = discord.Intents.default()
-intents.message_content = True
+intents.message_content = True # Make sure you need this intent
 intents.members = True
-client = commands.Bot(command_prefix="/", intents=intents) # Use commands.Bot as you had
+client = commands.Bot(command_prefix="/", intents=intents) # Use commands.Bot
 
 # --- Logging Setup ---
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.INFO) # Set to INFO for less verbose logs, DEBUG for more
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+# logger.setLevel(logging.DEBUG) # Uncomment for detailed debugging
 
-# --- Car Data (Simplified as requested) ---
-# This list is now mainly used for the dropdown options and client-side MPG lookup
-# The database 'cars' table is the source of truth for MPG in some parts (like initialize_cars_in_db)
-# Ensure MPG here matches the database (Subaru=20, Mercedes=17)
+# --- Car Data (Simplified) ---
 CARS = [
     {"name": "Subaru", "mpg": 20},
     {"name": "Mercedes", "mpg": 17},
 ]
 
-# --- Location Shortcut Configuration (NEW) ---
+# --- Location Shortcut Configuration ---
 LOCATION_COMMANDS = {
     "pnc": {"miles": 2.0, "location": "PNC"},
     "lifetime": {"miles": 14.4, "location": "Life Time"},
@@ -50,160 +48,112 @@ LOCATION_COMMANDS = {
     "waterpark": {"miles": 3.2, "location": "Waterpark"},
     "dominos": {"miles": 5.8, "location": "Dominos"},
     "harper": {"miles": 7.0, "location": "Harper"},
-    "bui": {"miles": 14.8, "location": "Baitul Ilm"}, # Using full name as requested
-    "alexianhospital": {"miles": 7.2, "location": "Alexian Hospital"}, # Added
-    "woodfieldmall": {"miles": 16.2, "location": "Woodfield Mall"}, # Added
+    "bui": {"miles": 14.8, "location": "Baitul Ilm"},
+    "alexianhospital": {"miles": 7.2, "location": "Alexian Hospital"},
+    "woodfieldmall": {"miles": 16.2, "location": "Woodfield Mall"},
 }
-
 
 # --- Helper Functions ---
 def calculate_cost(distance, mpg, price_per_gallon):
     """Calculates cost based on distance, mpg, and gas price."""
     if mpg is None or mpg <= 0 or price_per_gallon <= 0:
         logger.warning(f"Invalid input for cost calculation: distance={distance}, mpg={mpg}, price={price_per_gallon}")
-        return 0.0 # Avoid division by zero or invalid cost
+        return 0.0
     gallons_used = distance / mpg
     cost = gallons_used * price_per_gallon
-    return round(cost, 2) # Round to 2 decimal places for currency
+    return round(cost, 2)
 
-
-# --- MODIFIED format_balance_message ---
 def format_balance_message(users_with_miles, interaction):
-    """Formats the balance message, REMOVING the car notes section."""
+    """Formats the balance message (Car notes section is removed)."""
     message = ""
-
-    # Nickname mapping with specified order (Keep your original mapping)
     nickname_mapping = {
-        "858864178962235393": "Abbas",
-        "513552727096164378": "Sajjad",
-        "758778170421018674": "Jafar",
-        "838206242127085629": "Mosa",
+        "858864178962235393": "Abbas", "513552727096164378": "Sajjad",
+        "758778170421018674": "Jafar", "838206242127085629": "Mosa",
         "393241098002235392": "Ali",
     }
 
-    message += "```\n--- Balances ---\n" # Added a header for clarity
+    message += "```\n--- Balances ---\n"
+    found_users = False
     for user_id in nickname_mapping:
         if user_id in users_with_miles:
             user_data = users_with_miles[user_id]
-            # Use nickname if available, otherwise fall back to name from DB/Discord
             nickname = nickname_mapping.get(user_id, user_data.get("name", f"User {user_id}"))
-            message += f"{nickname}: ${user_data['total_owed']:.2f}\n"
-        else:
-            # Optionally mention users in mapping but not in data (e.g., zero balance and no activity)
-             nickname = nickname_mapping.get(user_id, f"User {user_id}")
-             # logger.debug(f"User {nickname} ({user_id}) not found in users_with_miles data for balance message.")
-             # You could add them with $0.00 balance if desired:
-             # message += f"{nickname}: $0.00\n"
-             pass # Or just skip them if they have no data
+            message += f"{nickname}: ${user_data.get('total_owed', 0.0):.2f}\n"
+            found_users = True
+
+    if not found_users:
+        message += "No user balances found.\n"
 
     message += "```\n"
-
-    # --- Car notes section REMOVED as requested ---
-    # message += "```\n--- Car Notes ---\n"
-    # conn = get_db_connection()
-    # cur = conn.cursor()
-    # cur.execute("SELECT name, notes FROM cars")
-    # car_data = cur.fetchall()
-    # conn.close()
-    # for car_name, car_notes in car_data:
-    #     if car_notes: # Only display if there are notes
-    #        message += f"{car_name}: {car_notes}\n"
-    #     else:
-    #        message += f"{car_name}: No notes\n" # Or skip if no notes
-    # message += "```\n"
-
     return message
 
-# --- format_car_usage_message (Keep As Is) ---
-def format_car_usage_message(users_with_miles):
-    message = "### User Car Usage\n"
-    nickname_mapping = { # Keep your mapping
-        "858864178962235393": "Abbas",
-        "513552727096164378": "Sajjad",
-        "758778170421018674": "Jafar",
-        "838206242127085629": "Mosa",
-        "393241098002235392": "Ali",
-    }
+# --- format_car_usage_message REMOVED ---
 
-    for user_id in nickname_mapping:
-        if user_id in users_with_miles:
-            user_data = users_with_miles[user_id]
-            nickname = nickname_mapping.get(user_id, user_data.get("name", "Unknown User"))
-            message += f"**{nickname}**:\n"
-            if user_data.get('car_usage'): # Use .get() for safety
-                # Sort car usage by car name for consistency
-                sorted_car_usage = sorted(user_data['car_usage'], key=lambda x: x.get('car_name', ''))
-                for car_usage in sorted_car_usage:
-                     # Ensure keys exist before formatting
-                    car_name = car_usage.get('car_name', 'Unknown Car')
-                    miles = car_usage.get('miles', 0.0)
-                    fill_amount = car_usage.get('fill_amount', 0.0)
-                    message += f"  > {car_name}: {miles:.2f} miles, ${fill_amount:.2f} in fills\n"
-            else:
-                 message += "  > No car usage recorded.\n"
-            total_miles = user_data.get('total_miles', 0.0)
-            message += f"  > Total miles: {total_miles:.2f}\n"
-            message += "\n"
-    return message
-
-
-# --- Database Functions (Keep As Is, except maybe initialize_cars_in_db) ---
+# --- Database Functions ---
 def get_db_connection():
-    conn = psycopg2.connect(DATABASE_URL, sslmode='require') # Added sslmode='require' often needed for Heroku/Railway
-    return conn
+    try:
+        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+        return conn
+    except psycopg2.OperationalError as e:
+        logger.error(f"Failed to connect to database: {e}")
+        raise # Re-raise the exception so calling code knows connection failed
 
 def initialize_cars_in_db(conn):
     """Ensures only the desired cars exist in the DB."""
+    # Keep this function as is from previous version
     cur = conn.cursor()
     desired_cars = {car["name"]: car["mpg"] for car in CARS}
-
-    # Delete cars not in the desired list
-    # Convert list of names to tuple for SQL IN clause
     car_names_tuple = tuple(desired_cars.keys())
-    if len(car_names_tuple) == 1: # Handle single car case for SQL syntax
-         delete_sql = "DELETE FROM cars WHERE name != %s"
-         cur.execute(delete_sql, (car_names_tuple[0],))
-    elif len(car_names_tuple) > 1:
-         delete_sql = sql.SQL("DELETE FROM cars WHERE name NOT IN {}").format(sql.Literal(car_names_tuple))
-         cur.execute(delete_sql)
-    else: # No desired cars? Delete all (unlikely scenario)
-         cur.execute("DELETE FROM cars")
-    logger.info(f"Deleted cars not in {list(desired_cars.keys())}")
 
+    try:
+        # Delete cars not in the desired list
+        if len(car_names_tuple) == 1:
+            delete_sql = "DELETE FROM cars WHERE name != %s"
+            cur.execute(delete_sql, (car_names_tuple[0],))
+        elif len(car_names_tuple) > 1:
+            delete_sql = sql.SQL("DELETE FROM cars WHERE name NOT IN {}").format(sql.Literal(car_names_tuple))
+            cur.execute(delete_sql)
+        else:
+            cur.execute("DELETE FROM cars")
+        logger.info(f"Deleted cars not in {list(desired_cars.keys())}. Rows affected: {cur.rowcount}")
 
-    # Insert or update desired cars
-    for name, mpg in desired_cars.items():
-        cur.execute(
-            """
-            INSERT INTO cars (name, mpg) VALUES (%s, %s)
-            ON CONFLICT (name) DO UPDATE SET mpg = EXCLUDED.mpg;
-            """,
-            (name, mpg)
-        )
-        logger.info(f"Ensured car '{name}' exists with MPG {mpg}")
-    conn.commit()
-    cur.close() # Close cursor
+        # Insert or update desired cars
+        for name, mpg in desired_cars.items():
+            cur.execute(
+                """
+                INSERT INTO cars (name, mpg) VALUES (%s, %s)
+                ON CONFLICT (name) DO UPDATE SET mpg = EXCLUDED.mpg;
+                """,
+                (name, mpg)
+            )
+            # logger.info(f"Ensured car '{name}' exists with MPG {mpg}") # Reduce log verbosity
+        conn.commit()
+        logger.info("Car initialization in DB complete.")
+    except psycopg2.Error as e:
+        logger.error(f"Database error during car initialization: {e}")
+        conn.rollback() # Rollback on error
+    finally:
+        cur.close()
 
 def get_car_id_from_name(conn, car_name):
+    # Keep this function as is
     cur = conn.cursor()
-    cur.execute("SELECT id FROM cars WHERE name = %s", (car_name,))
-    result = cur.fetchone()
-    cur.close()
-    if result:
-        return result[0]
-    else:
-        logger.error(f"Could not find car_id for car name: {car_name}")
-        # Handle error appropriately - maybe raise an exception or return None carefully
-        raise ValueError(f"Car named '{car_name}' not found in the database.")
-        # return None
+    try:
+        cur.execute("SELECT id FROM cars WHERE name = %s", (car_name,))
+        result = cur.fetchone()
+        if result:
+            return result[0]
+        else:
+            logger.error(f"Could not find car_id for car name: {car_name}")
+            raise ValueError(f"Car named '{car_name}' not found in the database.")
+    finally:
+        cur.close()
 
-# --- get_car_name_from_id (Keep As Is) ---
 def get_car_name_from_id(conn, car_id):
-    # Ensure connection is valid before using
+    # Keep this function as is
     if conn is None or conn.closed:
         logger.error("get_car_name_from_id: Database connection is closed or invalid.")
-        return "Unknown Car" # Or raise an error
-
+        return "Unknown Car"
     cur = conn.cursor()
     try:
         cur.execute("SELECT name FROM cars WHERE id = %s", (car_id,))
@@ -213,218 +163,175 @@ def get_car_name_from_id(conn, car_id):
         logger.error(f"Error fetching car name for ID {car_id}: {e}")
         return "Error Fetching Name"
     finally:
-        if cur:
-            cur.close()
+        if cur: cur.close()
 
-
-# --- get_or_create_user (Keep As Is) ---
 def get_or_create_user(conn, user_id, user_name):
-  cur = conn.cursor()
-  cur.execute("SELECT name, total_owed FROM users WHERE id = %s", (user_id,))
-  user = cur.fetchone()
-  if user is None:
-    cur.execute("INSERT INTO users (id, name, total_owed) VALUES (%s, %s, %s)", (user_id, user_name, 0))
-    conn.commit()
-    cur.close()
-    return {"name": user_name, "total_owed": 0}
-  else:
-    cur.close()
-    return {"name": user[0], "total_owed": float(user[1])} # Ensure total_owed is float
-
-# --- save_user_data (Keep As Is) ---
-def save_user_data(conn, user_id, user_name, total_owed):
-  cur = conn.cursor()
-  cur.execute("UPDATE users SET name=%s, total_owed=%s WHERE id=%s", (user_name, total_owed, user_id))
-  conn.commit()
-  cur.close()
-
-# --- get_all_users_with_miles (Keep As Is) ---
-def get_all_users_with_miles(conn):
-    cur = conn.cursor()
-    # Make sure this function exists in your DB and returns correct structure
-    cur.execute("SELECT * FROM get_all_users_with_miles_and_car_usage_func()")
-    users_data = {}
-    fetched_rows = cur.fetchall()
-    cur.close()
-    for row in fetched_rows:
-      # Assuming row structure: user_id, name, total_owed, total_miles, car_usage (jsonb/array)
-      if len(row) >= 5: # Basic check for expected columns
-          users_data[row[0]] = {
-              "name": row[1],
-              "total_owed": float(row[2]) if row[2] is not None else 0.0, # Handle None, ensure float
-              "total_miles": float(row[3]) if row[3] is not None else 0.0, # Handle None, ensure float
-              "car_usage": row[4] if row[4] else [] # Handle None or empty array/json
-          }
-      else:
-          logger.warning(f"Row from get_all_users_with_miles_and_car_usage_func has unexpected structure: {row}")
-    return users_data
-
-
-# --- add_payment (Keep As Is, though maybe unused directly) ---
-def add_payment(conn, payer_id, payer_name, amount):
-    cur = conn.cursor()
-    timestamp_iso = datetime.datetime.now().isoformat()
-    cur.execute("INSERT INTO payments (timestamp, payer_id, payer_name, amount) VALUES (%s, %s, %s, %s)", (timestamp_iso, payer_id, payer_name, amount))
-    conn.commit()
-    cur.close()
-
-
-# --- Gas Price Functions ---
-# Keep get_current_gas_price as it's used for cost calculation
-# set_current_gas_price is likely unused if fills handle cost setting differently now
-
-def get_current_gas_price(conn):
-    """Gets the most recently recorded gas price."""
-    cur = conn.cursor()
-    cur.execute("SELECT price FROM gas_prices ORDER BY id DESC LIMIT 1")
-    price = cur.fetchone()
-    cur.close()
-    if price and price[0] is not None:
-         # Ensure the price is treated as float
-         try:
-              return float(price[0])
-         except (ValueError, TypeError):
-              logger.error(f"Invalid gas price found in DB: {price[0]}. Falling back to default.")
-              return 3.30 # Default fallback
-    else:
-        logger.warning("No gas price found in DB, using default: 3.30")
-        return 3.30 # Default if table is empty or price is NULL
-
-# --- record_drive (Keep As Is - relies on SQL function) ---
-def record_drive(conn, user_id, user_name, car_id, distance, cost, near_empty, timestamp_iso, location=None):
-    """Calls the SQL function to record a drive, now potentially including location."""
+    # Keep this function as is
     cur = conn.cursor()
     try:
-        # Check if your record_drive_func supports location. If not, you'll need to modify it
-        # or use a separate UPDATE statement after the call.
-        # Assuming it takes 8 arguments now: user_id, user_name, car_id, distance, cost, near_empty, timestamp_iso, location
-        # If it only takes 7, remove 'location' from the call and handle it separately if needed.
-
-        # Let's check the number of arguments your function expects first (example, adjust query if needed)
-        # cur.execute("SELECT proargnames FROM pg_proc WHERE proname = 'record_drive_func';")
-        # arg_names = cur.fetchone()
-        # logger.debug(f"Arguments for record_drive_func: {arg_names}")
-
-        # *** Adjust this call based on whether your SQL function handles location ***
-        cur.execute("CALL record_drive_func(%s, %s, %s, %s, %s, %s, %s)", # Assuming 7 args for now
-                    (user_id, user_name, car_id, distance, cost, near_empty, timestamp_iso))
-
-        # If the function doesn't handle location, and you added the column, update it separately:
-        # Requires knowing the 'id' of the drive just inserted, which the CALL might not return easily.
-        # Alternative: Modify record_drive_func to accept and store location.
-        # If location storage isn't critical, you can just skip storing it.
-        # if location:
-        #    logger.warning("record_drive_func might not handle 'location'. Location not stored in DB unless function is updated.")
-        #    # Example (needs drive ID): cur.execute("UPDATE drives SET location = %s WHERE id = %s", (location, drive_id))
-
-
-        conn.commit()
-        logger.info(f"Drive recorded via func: User {user_id}, CarID {car_id}, Dist {distance}, Cost {cost}, Loc {location}")
-    except Exception as e:
-        conn.rollback() # Rollback on error
-        logger.error(f"Error calling record_drive_func: {e}", exc_info=True)
-        raise # Re-raise the exception to be caught by the caller
+        cur.execute("SELECT name, total_owed FROM users WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+        if user is None:
+            cur.execute("INSERT INTO users (id, name, total_owed) VALUES (%s, %s, %s)", (user_id, user_name, 0))
+            conn.commit()
+            logger.info(f"Created new user: {user_name} ({user_id})")
+            return {"name": user_name, "total_owed": 0.0}
+        else:
+            return {"name": user[0], "total_owed": float(user[1]) if user[1] is not None else 0.0}
     finally:
         cur.close()
 
-
-# --- Unused History/Getter Functions (Keep As Is or remove if truly unused) ---
-# get_user_drive_history, get_user_fill_history, get_car_drive_history, etc.
-
-# --- get_car_data (Keep As Is - used by /note maybe?) ---
-def get_car_data(conn):
+def save_user_data(conn, user_id, user_name, total_owed):
+    # Keep this function as is
     cur = conn.cursor()
-    cur.execute("SELECT name, notes FROM cars WHERE name IN %s", (tuple(c['name'] for c in CARS),)) # Only fetch desired cars
-    car_data = {}
-    fetched_rows = cur.fetchall()
-    cur.close()
-    for row in fetched_rows:
-        car_data[row[0]] = {"notes": row[1]}
-    return car_data
+    try:
+        cur.execute("UPDATE users SET name=%s, total_owed=%s WHERE id=%s", (user_name, total_owed, user_id))
+        conn.commit()
+    finally:
+        cur.close()
 
-# --- Bot Commands ---
+def get_all_users_with_miles(conn):
+    # Keep this function as is
+    cur = conn.cursor()
+    users_data = {}
+    try:
+        cur.execute("SELECT * FROM get_all_users_with_miles_and_car_usage_func()")
+        fetched_rows = cur.fetchall()
+        for row in fetched_rows:
+            if len(row) >= 5:
+                users_data[row[0]] = {
+                    "name": row[1],
+                    "total_owed": float(row[2]) if row[2] is not None else 0.0,
+                    "total_miles": float(row[3]) if row[3] is not None else 0.0,
+                    "car_usage": row[4] if row[4] else []
+                }
+            else:
+                logger.warning(f"Row from get_all_users_with_miles_and_car_usage_func has unexpected structure: {row}")
+    finally:
+        cur.close()
+    return users_data
 
-# --- MODIFIED CarDropdown ---
+# --- add_payment (Keep as is) ---
+def add_payment(conn, payer_id, payer_name, amount):
+    cur = conn.cursor()
+    timestamp_iso = datetime.datetime.now().isoformat()
+    try:
+        cur.execute("INSERT INTO payments (timestamp, payer_id, payer_name, amount) VALUES (%s, %s, %s, %s)", (timestamp_iso, payer_id, payer_name, amount))
+        conn.commit()
+    finally:
+        cur.close()
+
+# --- Gas Price Functions (Keep as is) ---
+def get_current_gas_price(conn):
+    cur = conn.cursor()
+    price_val = 3.30 # Default
+    try:
+        cur.execute("SELECT price FROM gas_prices ORDER BY id DESC LIMIT 1")
+        price = cur.fetchone()
+        if price and price[0] is not None:
+            try:
+                price_val = float(price[0])
+            except (ValueError, TypeError):
+                logger.error(f"Invalid gas price found in DB: {price[0]}. Falling back to default.")
+        else:
+            logger.warning("No gas price found in DB, using default: 3.30")
+    finally:
+        cur.close()
+    return price_val
+
+# --- record_drive (Keep as is - including location parameter) ---
+def record_drive(conn, user_id, user_name, car_id, distance, cost, near_empty, timestamp_iso, location=None):
+    cur = conn.cursor()
+    try:
+        # Assuming your SQL function record_drive_func takes 7 arguments
+        # If it takes 8 (including location), modify the call
+        cur.execute("CALL record_drive_func(%s, %s, %s, %s, %s, %s, %s)",
+                    (user_id, user_name, car_id, distance, cost, near_empty, timestamp_iso))
+        # If you need to store location and the function doesn't, you'd need an UPDATE here,
+        # but that requires getting the ID of the inserted drive.
+        if location:
+             logger.info(f"Drive location '{location}' provided but might not be stored by record_drive_func.")
+        conn.commit()
+        logger.info(f"Drive recorded via func: User {user_id}, CarID {car_id}, Dist {distance}, Cost {cost}, Loc {location}")
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error calling record_drive_func: {e}", exc_info=True)
+        raise
+    finally:
+        cur.close()
+
+# --- get_car_data REMOVED ---
+
+# --- Bot UI Elements ---
+
 class CarDropdown(discord.ui.Select):
-    """Dropdown for selecting a car, now simplified and used for drives."""
-    # Note: 'view_type' might be less relevant now if this is only for drives
+    """Dropdown for selecting a car during drive logging."""
     def __init__(self, distance: float, location_name: str = None):
         self.distance = distance
-        self.location_name = location_name # Store location if provided by command
-
-        # Use the simplified global CARS list for options
+        self.location_name = location_name
         options = [
             discord.SelectOption(label=car["name"], description=f"{car['mpg']} MPG")
             for car in CARS
         ]
         super().__init__(placeholder="Choose the car...", options=options, min_values=1, max_values=1)
-        # self.view_type = "drove" # Hardcode or remove if only used for drives
 
     async def callback(self, interaction: discord.Interaction):
-        # Defer immediately as processing involves DB and potentially purging
-        await interaction.response.defer(ephemeral=True, thinking=True) # Defer ephemerally
+        await interaction.response.defer(ephemeral=True, thinking=True)
 
         selected_car_name = self.values[0]
         user_id = str(interaction.user.id)
-        user_name = interaction.user.display_name # Use display_name for better readability
+        user_name = interaction.user.display_name
 
-        conn = None # Initialize conn to None
+        conn = None
         try:
             conn = get_db_connection()
 
             # --- Calculate Cost ---
             car_data = next((car for car in CARS if car["name"] == selected_car_name), None)
             if not car_data:
-                # This shouldn't happen if options are from CARS, but good practice to check
-                await interaction.followup.send("❌ Error: Invalid car data found.", ephemeral=True)
-                if conn: conn.close()
-                return
+                await interaction.followup.send("❌ Error: Invalid car data selected.", ephemeral=True)
+                return # No need to close conn here, finally block handles it
 
             mpg = car_data["mpg"]
-            current_gas_price = get_current_gas_price(conn) # Get latest gas price
+            current_gas_price = get_current_gas_price(conn)
             cost = calculate_cost(self.distance, mpg, current_gas_price)
 
             # --- Record Drive ---
-            car_id = get_car_id_from_name(conn, selected_car_name) # Get ID from DB
+            car_id = get_car_id_from_name(conn, selected_car_name)
             record_drive(
-                conn=conn,
-                user_id=user_id,
-                user_name=user_name, # Pass user's display name
-                car_id=car_id,
-                distance=self.distance,
-                cost=cost,
-                near_empty=False, # Assuming 'False' unless specified otherwise
+                conn=conn, user_id=user_id, user_name=user_name, car_id=car_id,
+                distance=self.distance, cost=cost, near_empty=False,
                 timestamp_iso=datetime.datetime.now().isoformat(),
-                location=self.location_name # Pass location name if available
+                location=self.location_name
             )
 
             # --- Get Fresh Data & Format Message ---
-            users_with_miles = get_all_users_with_miles(conn) # Get updated balances/usage
-
-            nickname_mapping = { # Keep your mapping
+            users_with_miles = get_all_users_with_miles(conn)
+            nickname_mapping = {
                 "858864178962235393": "Abbas", "513552727096164378": "Sajjad",
                 "758778170421018674": "Jafar", "838206242127085629": "Mosa",
                 "393241098002235392": "Ali",
             }
-            nickname = nickname_mapping.get(user_id, user_name) # Get nickname
+            nickname = nickname_mapping.get(user_id, user_name)
 
-            # --- CONSTRUCT THE NEW OUTPUT MESSAGE ---
+            # --- CONSTRUCT THE OUTPUT MESSAGE ---
             if self.location_name:
-                # Location command format
                  primary_message = f"**{nickname}** drove to **{self.location_name}** in a **{selected_car_name}**: **${cost:.2f}**"
             else:
-                # Mileage command format (/drove, /1, /5, etc.)
-                 primary_message = f"**{nickname}** drove **{self.distance} miles** in a **{selected_car_name}**: **${cost:.2f}**"
+                 # Format distance nicely (remove .0 if whole number)
+                 distance_str = f"{self.distance:.1f}".rstrip('0').rstrip('.') if '.' in f"{self.distance:.1f}" else str(int(self.distance))
+                 primary_message = f"**{nickname}** drove **{distance_str} miles** in a **{selected_car_name}**: **${cost:.2f}**"
 
-            balance_message = format_balance_message(users_with_miles, interaction) # Get formatted balances
-            full_message = primary_message + "\n\n" + balance_message # Combine parts
+            balance_message = format_balance_message(users_with_miles, interaction)
+            full_message = primary_message + "\n\n" + balance_message
 
             # --- Purge and Send to Target Channel ---
             target_channel = interaction.guild.get_channel(TARGET_CHANNEL_ID) if interaction.guild else None
+            confirmation_message = "✅ Drive recorded."
             if target_channel:
                 try:
-                    await target_channel.purge(limit=None) # Purge the channel
-                    await target_channel.send(full_message) # Send the combined message
+                    await target_channel.purge(limit=None)
+                    await target_channel.send(full_message)
                     confirmation_message = "✅ Drive recorded and message sent to channel!"
                 except discord.errors.Forbidden:
                      logger.error(f"Bot lacks permissions to purge/send in channel {TARGET_CHANNEL_ID}")
@@ -436,67 +343,51 @@ class CarDropdown(discord.ui.Select):
                 logger.warning(f"Target channel {TARGET_CHANNEL_ID} not found.")
                 confirmation_message = "✅ Drive recorded, but target channel not found."
 
-            # Send ephemeral confirmation to the user who invoked the command
             await interaction.followup.send(confirmation_message, ephemeral=True)
 
-        except ValueError as e: # Catch specific error from get_car_id_from_name
+        except ValueError as e:
              logger.error(f"Value error during drive recording: {e}", exc_info=True)
              await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
         except psycopg2.Error as db_err:
             logger.error(f"Database error during drive recording: {db_err}", exc_info=True)
             await interaction.followup.send("❌ A database error occurred.", ephemeral=True)
-            if conn: conn.rollback() # Rollback on DB error
+            if conn: conn.rollback()
         except Exception as e:
             logger.error(f"Unexpected error in CarDropdown callback: {e}", exc_info=True)
             await interaction.followup.send("❌ An unexpected error occurred.", ephemeral=True)
-            if conn: conn.rollback() # Rollback on general error
+            if conn: conn.rollback()
         finally:
-            if conn:
+            if conn and not conn.closed:
                 conn.close()
-            # Remove the dropdown from the original ephemeral message
-            # await interaction.edit_original_response(view=None) # Already deferred, followup is used
 
-# --- MODIFIED DroveView ---
 class DroveView(discord.ui.View):
-    """View specifically for initiating a drive record, holding distance/location."""
+    """View for initiating a drive record."""
     def __init__(self, distance: float, location_name: str = None, timeout=180):
         super().__init__(timeout=timeout)
-        self.distance = distance
-        self.location_name = location_name
-        # Pass distance and location to the dropdown
-        self.add_item(CarDropdown(distance=self.distance, location_name=self.location_name))
-        # self.selected_car = None # No longer needed here, handled in dropdown
+        self.add_item(CarDropdown(distance=distance, location_name=location_name))
 
-    # Keep interaction check to ensure only the command user can interact
+    # Keep interaction check
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        # Try to get the original interaction user ID robustly
         original_user_id = None
         if hasattr(interaction.message, 'interaction') and interaction.message.interaction:
             original_user_id = interaction.message.interaction.user.id
-        # Fallback for potential edge cases (though less likely with slash commands)
-        elif hasattr(interaction, 'message') and hasattr(interaction.message, '_interaction_user_id'):
-             original_user_id = interaction.message._interaction_user_id
-
         if not original_user_id:
-             logger.warning("Could not reliably determine original interaction user for check.")
-             # Decide behaviour: allow anyone or deny? Denying is safer.
+             logger.warning("Could not reliably determine original interaction user for drive check.")
              await interaction.response.send_message("Could not verify original command user.", ephemeral=True)
              return False
-
         if interaction.user.id != original_user_id:
             await interaction.response.send_message("This is not your command!", ephemeral=True)
             return False
         return True
 
-# --- CarDropdownFill and FillView (Keep As Is - For /filled command) ---
+# --- Fill related UI (CarDropdownFill, FillView) - Keep As Is ---
 class CarDropdownFill(discord.ui.Select):
     def __init__(self, cars):
-        # Use simplified CARS list here too for consistency
-        options = [discord.SelectOption(label=car["name"]) for car in CARS]
+        options = [discord.SelectOption(label=car["name"]) for car in cars]
         super().__init__(placeholder="Choose a car...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        # --- Keep your existing fill logic ---
+        # Keep existing fill logic from previous version
         self.view.selected_car = self.values[0]
         await interaction.response.defer(ephemeral=True, thinking=True)
 
@@ -504,22 +395,16 @@ class CarDropdownFill(discord.ui.Select):
         try:
             conn = get_db_connection()
             user_id = str(interaction.user.id)
-            user_name = interaction.user.display_name # Use display name
+            user_name = interaction.user.display_name
             car_name = self.view.selected_car
             payment_amount = self.view.payment
-            payer_id = self.view.payer # This should be the ID string or None
+            payer_id = self.view.payer # Should be string ID or None
 
             logger.debug(f"Fill callback - User ID: {user_id}, User Name: {user_name}, Car Name: {car_name}, Payment: {payment_amount}, Payer ID: {payer_id}")
 
-            # Call your existing record_fill function
-            # Make sure record_fill and its SQL counterpart (record_fill_func) are correct
             record_fill(
-                conn=conn,
-                user_id=user_id,
-                user_name=user_name,
-                car_name=car_name,
-                gallons=0,  # Dummy Value (as per your original code)
-                price_per_gallon=0,  # Dummy Value (as per your original code)
+                conn=conn, user_id=user_id, user_name=user_name, car_name=car_name,
+                gallons=0, price_per_gallon=0, # Dummy values
                 payment_amount=payment_amount,
                 timestamp_iso=datetime.datetime.now().isoformat(),
                 payer_id=payer_id
@@ -527,22 +412,19 @@ class CarDropdownFill(discord.ui.Select):
 
             # --- Get Fresh Data & Format Message ---
             users_with_miles = get_all_users_with_miles(conn)
-
-            nickname_mapping = { # Keep your mapping
+            nickname_mapping = {
                 "858864178962235393": "Abbas", "513552727096164378": "Sajjad",
                 "758778170421018674": "Jafar", "838206242127085629": "Mosa",
                 "393241098002235392": "Ali",
             }
             nickname = nickname_mapping.get(user_id, user_name)
 
-            # Construct fill message
-            message = f"**{nickname}** filled the **{car_name}** and paid **${payment_amount:.2f}**.\n\n" # Clearer fill message
+            message = f"**{nickname}** filled the **{car_name}** and paid **${payment_amount:.2f}**.\n\n"
             message += format_balance_message(users_with_miles, interaction)
 
             # --- Purge and Send ---
             target_channel = interaction.guild.get_channel(TARGET_CHANNEL_ID) if interaction.guild else None
-            confirmation_message = "✅ Fill recorded." # Default confirmation
-
+            confirmation_message = "✅ Fill recorded."
             if target_channel:
                  try:
                       await target_channel.purge(limit=None)
@@ -569,193 +451,98 @@ class CarDropdownFill(discord.ui.Select):
             await interaction.followup.send("❌ Failed to record fill.", ephemeral=True)
             if conn: conn.rollback()
         finally:
-            if conn:
+            if conn and not conn.closed:
                 conn.close()
-            # await interaction.edit_original_response(view=None) # Already deferred
-
 
 class FillView(discord.ui.View):
-     # Keep As Is, but ensure CarDropdownFill uses updated CARS list if needed (done above)
-    def __init__(self, payment, payer, timeout=180): # Added timeout
+    # Keep As Is
+    def __init__(self, payment, payer, timeout=180):
         super().__init__(timeout=timeout)
-        # self.gallons = 0 # Not needed if using dummy values
-        # self.price = 0 # Not needed if using dummy values
         self.payment = payment
-        self.payer = payer # Should be user ID string or None
+        self.payer = payer
         self.selected_car = None
-        self.add_item(CarDropdownFill(CARS)) # Pass simplified CARS
+        self.add_item(CarDropdownFill(CARS))
 
     # Keep interaction check As Is
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
          original_user_id = None
          if hasattr(interaction.message, 'interaction') and interaction.message.interaction:
              original_user_id = interaction.message.interaction.user.id
-         elif hasattr(interaction, 'message') and hasattr(interaction.message, '_interaction_user_id'):
-             original_user_id = interaction.message._interaction_user_id
-
          if not original_user_id:
               logger.warning("Could not reliably determine original interaction user for fill check.")
               await interaction.response.send_message("Could not verify original command user.", ephemeral=True)
               return False
-
          if interaction.user.id != original_user_id:
              await interaction.response.send_message("This is not your command!", ephemeral=True)
              return False
          return True
 
+# --- NoteView, CarDropdownNote REMOVED ---
 
-# --- NoteView and CarDropdown for Notes (Keep related logic if /note command is kept) ---
-# Modify CarDropdown used by NoteView to only show simplified cars if needed.
-class CarDropdownNote(discord.ui.Select): # Create a separate dropdown class for notes if needed
-     def __init__(self, cars):
-          options = [discord.SelectOption(label=car["name"]) for car in cars]
-          super().__init__(placeholder="Choose a car for the note...", options=options)
-
-     async def callback(self, interaction: discord.Interaction):
-          self.view.selected_car = self.values[0]
-          await interaction.response.defer(ephemeral=True, thinking=True)
-
-          conn = None
-          try:
-               conn = get_db_connection()
-               user_id = str(interaction.user.id)
-               user_name = interaction.user.display_name
-               car_name = self.view.selected_car
-               notes = self.view.notes
-
-               car_id = get_car_id_from_name(conn, car_name)
-
-               cur = conn.cursor()
-               cur.execute("UPDATE cars SET notes = %s WHERE id = %s", (notes, car_id))
-               conn.commit()
-               cur.close()
-
-               # --- Get Fresh Data & Format Message ---
-               users_with_miles = get_all_users_with_miles(conn)
-               nickname_mapping = { # Keep your mapping
-                   "858864178962235393": "Abbas", "513552727096164378": "Sajjad",
-                   "758778170421018674": "Jafar", "838206242127085629": "Mosa",
-                   "393241098002235392": "Ali",
-               }
-               nickname = nickname_mapping.get(user_id, user_name)
-
-               primary_message = f"**{nickname}** added/updated note for **{car_name}**: '{notes}'" # Clearer note message
-               balance_message = format_balance_message(users_with_miles, interaction) # Still show balances
-               full_message = primary_message + "\n\n" + balance_message
-
-               # --- Purge and Send ---
-               target_channel = interaction.guild.get_channel(TARGET_CHANNEL_ID) if interaction.guild else None
-               confirmation_message = "✅ Note updated." # Default confirmation
-
-               if target_channel:
-                    try:
-                         await target_channel.purge(limit=None)
-                         await target_channel.send(full_message)
-                         confirmation_message = "✅ Note updated and message sent to channel!"
-                    except discord.errors.Forbidden:
-                         logger.error(f"Bot lacks permissions to purge/send in channel {TARGET_CHANNEL_ID} for note.")
-                         confirmation_message = "✅ Note updated, but failed to update channel (permissions missing)."
-                    except Exception as e:
-                         logger.error(f"Error purging/sending note message to {TARGET_CHANNEL_ID}: {e}")
-                         confirmation_message = "✅ Note updated, but failed to update channel (error)."
-               else:
-                    logger.warning(f"Target channel {TARGET_CHANNEL_ID} not found for note.")
-                    confirmation_message = "✅ Note updated, but target channel not found."
-
-               await interaction.followup.send(confirmation_message, ephemeral=True)
-
-          except ValueError as e: # Catch specific error from get_car_id_from_name
-             logger.error(f"Value error during note update: {e}", exc_info=True)
-             await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
-          except psycopg2.Error as db_err:
-              logger.error(f"Database error during note update: {db_err}", exc_info=True)
-              await interaction.followup.send("❌ A database error occurred saving the note.", ephemeral=True)
-              if conn: conn.rollback()
-          except Exception as e:
-              logger.error(f"Error in note callback: {e}", exc_info=True)
-              await interaction.followup.send("❌ An error occurred updating the note.", ephemeral=True)
-              if conn: conn.rollback()
-          finally:
-              if conn:
-                  conn.close()
-              # await interaction.edit_original_response(view=None) # Already deferred
-
-
-class NoteView(discord.ui.View):
-    # Keep As Is, but use CarDropdownNote
-    def __init__(self, notes, timeout=180): # Added timeout
-        super().__init__(timeout=timeout)
-        self.add_item(CarDropdownNote(CARS)) # Use the note-specific dropdown
-        self.selected_car = None
-        self.notes = notes
-
-    # Keep interaction check As Is
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-         original_user_id = None
-         if hasattr(interaction.message, 'interaction') and interaction.message.interaction:
-             original_user_id = interaction.message.interaction.user.id
-         elif hasattr(interaction, 'message') and hasattr(interaction.message, '_interaction_user_id'):
-             original_user_id = interaction.message._interaction_user_id
-
-         if not original_user_id:
-              logger.warning("Could not reliably determine original interaction user for note check.")
-              await interaction.response.send_message("Could not verify original command user.", ephemeral=True)
-              return False
-
-         if interaction.user.id != original_user_id:
-             await interaction.response.send_message("This is not your command!", ephemeral=True)
-             return False
-         return True
+# --- Bot Commands ---
 
 # --- Central Drive Interaction Starter ---
 async def start_drive_interaction(interaction: discord.Interaction, miles: float, location_name: str = None):
     """Creates the DroveView and sends the initial ephemeral prompt."""
-    if miles <= 0:
-        await interaction.response.send_message("Miles driven must be positive.", ephemeral=True)
+    if miles < 0: # Allow 0 miles now
+        await interaction.response.send_message("Miles driven cannot be negative.", ephemeral=True)
         return
+    # Basic check for sanity
+    if miles > 10000: # Arbitrary limit
+         await interaction.response.send_message("That seems like an unreasonably long drive!", ephemeral=True)
+         return
 
     view = DroveView(distance=miles, location_name=location_name)
     await interaction.response.send_message("Which car did you drive?", view=view, ephemeral=True)
 
+# --- /drove command REMOVED ---
 
-# --- MODIFIED /drove command ---
-@client.tree.command(name="drove", description="Log miles driven (> 40 or custom) and calculate cost.")
-@app_commands.describe(distance="Distance driven in miles (e.g., 45.5)")
-async def drove(interaction: discord.Interaction, distance: float): # Changed distance to float directly
-    """Logs a drive with a custom mile amount."""
-    if distance <= 40:
-         await interaction.response.send_message(f"Please use the dedicated /{int(distance)} command for distances up to 40 miles.", ephemeral=True)
-         return
-    # Use the central handler function
-    await start_drive_interaction(interaction, distance)
-
-
-# --- NEW Numbered Commands (/1 to /40) ---
+# --- MODIFIED Numbered Commands Factory (/0 to /100 with optional decimal) ---
 def create_number_command(miles_value: int):
-    """Factory function to create numbered drive commands."""
+    """Factory function to create numbered drive commands with optional decimal."""
+
     # Define the actual command coroutine function inside the factory
-    @app_commands.command(name=str(miles_value), description=f"Log a drive of {miles_value} miles.")
-    async def dynamic_command(interaction: discord.Interaction):
-        # Call the central handler with the fixed mileage
-        await start_drive_interaction(interaction, float(miles_value)) # Ensure miles is float
+    @app_commands.command(name=str(miles_value), description=f"Log a drive of {miles_value} miles (+ optional .1 to .9).")
+    @app_commands.describe(decimal="Add decimal miles (e.g., 5 for .5 miles)")
+    async def dynamic_command(interaction: discord.Interaction,
+                              # Optional argument for decimal part, restricted to 1-9
+                              decimal: Optional[app_commands.Range[int, 1, 9]] = None):
+        try:
+            # Calculate final miles
+            final_miles = float(miles_value)
+            if decimal is not None:
+                final_miles += decimal / 10.0
+
+            # Call the central handler with the calculated mileage
+            await start_drive_interaction(interaction, final_miles)
+        except Exception as e:
+             logger.error(f"Error in dynamic command /{miles_value}: {e}", exc_info=True)
+             # Try to send an error message back to the user if interaction hasn't been responded to
+             try:
+                  await interaction.response.send_message("An error occurred processing this command.", ephemeral=True)
+             except discord.errors.InteractionResponded:
+                  await interaction.followup.send("An error occurred processing this command.", ephemeral=True)
 
     return dynamic_command # Return the coroutine function
 
-
-# --- NEW Location Commands ---
+# --- Location Commands Factory (Keep As Is) ---
 def create_location_command(command_name: str, data: dict):
     """Factory function to create location-based drive commands."""
     miles_value = data["miles"]
-    location_name = data["location"] # Proper capitalization for display
+    location_name = data["location"]
 
-    # Define the actual command coroutine function inside the factory
     @app_commands.command(name=command_name.lower(), description=f"Log drive to {location_name} ({miles_value} miles).")
     async def dynamic_command(interaction: discord.Interaction):
-        # Call the central handler with miles and location name
-        await start_drive_interaction(interaction, miles_value, location_name)
+        try:
+            await start_drive_interaction(interaction, miles_value, location_name)
+        except Exception as e:
+             logger.error(f"Error in location command /{command_name}: {e}", exc_info=True)
+             try:
+                  await interaction.response.send_message("An error occurred processing this command.", ephemeral=True)
+             except discord.errors.InteractionResponded:
+                  await interaction.followup.send("An error occurred processing this command.", ephemeral=True)
 
-    return dynamic_command # Return the coroutine function
-
+    return dynamic_command
 
 # --- Event: on_ready ---
 @client.event
@@ -766,26 +553,28 @@ async def on_ready():
         print("Connecting to database for initialization...")
         conn = get_db_connection()
         print("Initializing cars in database...")
-        initialize_cars_in_db(conn) # Ensure only Subaru/Mercedes exist
+        initialize_cars_in_db(conn)
         print("Car initialization complete.")
-    except psycopg2.Error as e:
+    except Exception as e: # Catch broader exceptions during startup DB connection
          print(f"!!! Database connection/initialization error on ready: {e}")
+         # Depending on severity, you might want to exit or try reconnecting later
     finally:
-        if conn:
+        if conn and not conn.closed:
             conn.close()
-            print("Database connection closed.")
+            print("Database connection closed after init.")
 
     print("Registering dynamic commands...")
     registered_commands = 0
-    # Register numbered commands /1 to /40
-    for i in range(1, 41):
+    # Register numbered commands /0 to /100
+    # Range goes up to, but does not include, the stop value
+    for i in range(0, 101):
         try:
             cmd_func = create_number_command(i)
-            client.tree.add_command(cmd_func) # Add command func directly
+            client.tree.add_command(cmd_func)
             registered_commands += 1
         except Exception as e:
             print(f"Error registering command /{i}: {e}")
-    print(f"  Registered {registered_commands} numbered commands (1-40).")
+    print(f"  Attempted to register {registered_commands} numbered commands (0-100).")
 
     # Register location commands
     location_commands_registered = 0
@@ -796,260 +585,197 @@ async def on_ready():
             location_commands_registered += 1
         except Exception as e:
              print(f"Error registering location command /{name}: {e}")
-    print(f"  Registered {location_commands_registered} location commands.")
+    print(f"  Attempted to register {location_commands_registered} location commands.")
 
     # Sync commands
     try:
-        # Sync globally - might take time
-        synced = await client.tree.sync()
-        # Or sync to a specific guild for testing (replace YOUR_GUILD_ID)
-        # guild_id = 123456789012345678 # <--- REPLACE
+        # Consider syncing per guild during development for speed
+        # guild_id = YOUR_GUILD_ID # Replace with your test server ID
         # synced = await client.tree.sync(guild=discord.Object(id=guild_id))
-        print(f"Synced {len(synced)} command(s).")
+        # print(f"Synced {len(synced)} command(s) to guild {guild_id}.")
+        # Sync globally for production
+        synced = await client.tree.sync()
+        print(f"Synced {len(synced)} command(s) globally.")
     except Exception as e:
         print(f"Error syncing commands: {e}")
 
-
-# --- Keep your existing commands (filled, note, balance, allbalances, car_usage, settle, help) ---
-# Make sure they function correctly with the simplified CARS list and modified DB/output formats.
+# --- Existing Commands (filled, balance, allbalances, settle, help) ---
+# Keep the existing command functions for filled, balance, allbalances, settle
+# Make sure filled uses the updated CarDropdownFill and FillView if necessary
 
 @client.tree.command(name="filled")
 @app_commands.describe(
     payment="Total payment amount (e.g., 45.50)",
     payer="Who paid? (Optional - select user)"
 )
-async def filled(interaction: discord.Interaction, payment: float, payer: discord.Member = None): # Use discord.Member for user selection
+async def filled(interaction: discord.Interaction, payment: float, payer: Optional[discord.Member] = None): # Use Optional
     """Records a gas fill-up and payment."""
-    # Ensure payment is positive
     if payment <= 0:
         await interaction.response.send_message("Payment amount must be positive.", ephemeral=True)
         return
 
-    # Payer ID needs to be a string for DB consistency, or None
-    payer_id_str = str(payer.id) if payer else str(interaction.user.id) # Default to command user if not specified
-    logger.info(f"/filled command initiated by {interaction.user.id}. Payment: {payment}, Payer specified: {payer.id if payer else 'None'}, Using Payer ID: {payer_id_str}")
+    payer_member = payer if payer else interaction.user # Default to interaction user
+    payer_id_str = str(payer_member.id)
+    payer_display_name = payer_member.display_name
 
+    logger.info(f"/filled: User={interaction.user.id}, Payment={payment}, Payer={payer_display_name}({payer_id_str})")
 
-    fill_view = FillView(
-        payment=payment,
-        payer=payer_id_str # Pass the string ID
-    )
+    fill_view = FillView(payment=payment, payer=payer_id_str)
     await interaction.response.send_message(
-        f"Select the car filled (Payment: ${payment:.2f} by {payer.display_name if payer else interaction.user.display_name}):",
+        f"Select the car filled (Payment: ${payment:.2f} by {payer_display_name}):",
         view=fill_view,
         ephemeral=True
     )
 
-# --- record_fill function (Keep As Is - relies on SQL function) ---
+# --- record_fill (Keep As Is) ---
 def record_fill(conn, user_id, user_name, car_name, gallons, price_per_gallon,
                 payment_amount, timestamp_iso, payer_id=None):
-    """Calls the SQL function to record a fill."""
+    # Keep this function as is from previous version
     cur = conn.cursor()
     logger.debug(f"record_fill: user_id={user_id}, user_name={user_name}, car_name={car_name}, gallons={gallons}, price_per_gallon={price_per_gallon}, payment_amount={payment_amount}, payer_id={payer_id}, timestamp_iso={timestamp_iso}")
     try:
-        # Ensure your record_fill_func exists and takes these arguments in this order
-        # Verify payer_id handling in the SQL function (is it nullable? correct type?)
         cur.execute("CALL record_fill_func(%s, %s, %s, %s, %s, %s, %s, %s)",
                     (user_id, user_name, car_name, float(gallons), float(price_per_gallon),
-                     float(payment_amount), timestamp_iso, payer_id)) # Pass payer_id
+                     float(payment_amount), timestamp_iso, payer_id))
         conn.commit()
-        logger.debug("record_fill_func executed successfully and committed.")
+        logger.debug("record_fill_func executed successfully.")
     except Exception as e:
-        conn.rollback() # Rollback on error
+        conn.rollback()
         logger.error(f"Error in record_fill calling record_fill_func: {e}", exc_info=True)
-        raise # Re-raise exception
+        raise
     finally:
         cur.close()
 
-
-@client.tree.command(name="note")
-@app_commands.describe(notes="Any notes about the car (e.g., 'Needs oil change')")
-async def note(interaction: discord.Interaction, notes: str):
-    """Sets or updates a note for a specific car."""
-    if not notes.strip():
-         await interaction.response.send_message("Note cannot be empty.", ephemeral=True)
-         return
-    view = NoteView(notes)
-    await interaction.response.send_message("Which car do you want to add/update the note for?", view=view, ephemeral=True)
-
+# --- /note command REMOVED ---
 
 @client.tree.command(name="balance")
 async def balance(interaction: discord.Interaction):
     """Shows your personal current balance owed."""
+    # Keep this command as is from previous version
     conn = None
     try:
         conn = get_db_connection()
         user_id = str(interaction.user.id)
-        user_name = interaction.user.display_name # Use display name
-        # Use get_or_create_user which handles new users and returns dict
+        user_name = interaction.user.display_name
         user_data = get_or_create_user(conn, user_id, user_name)
-        balance = user_data.get('total_owed', 0.0) # Safely get balance
-
-        await interaction.response.send_message(f"Your current balance is: **${balance:.2f}**", ephemeral=True)
-
+        balance_val = user_data.get('total_owed', 0.0)
+        await interaction.response.send_message(f"Your current balance is: **${balance_val:.2f}**", ephemeral=True)
     except psycopg2.Error as db_err:
         logger.error(f"Database error in /balance command: {db_err}", exc_info=True)
-        await interaction.response.send_message("❌ A database error occurred while retrieving your balance.", ephemeral=True)
+        await interaction.response.send_message("❌ A database error occurred retrieving your balance.", ephemeral=True)
     except Exception as e:
         logger.error(f"Error in /balance command: {e}", exc_info=True)
-        await interaction.response.send_message("❌ An error occurred while retrieving your balance.", ephemeral=True)
+        await interaction.response.send_message("❌ An error occurred retrieving your balance.", ephemeral=True)
     finally:
-        if conn:
-            conn.close()
-
+        if conn and not conn.closed: conn.close()
 
 @client.tree.command(name="allbalances")
 async def allbalances(interaction: discord.Interaction):
-    """Shows the balances of all tracked users."""
-    # Defer response as DB query and formatting might take time
-    await interaction.response.defer(thinking=True)
+    """Updates the main channel with the balances of all tracked users."""
+    # Keep this command as is from previous version
+    await interaction.response.defer(thinking=True, ephemeral=True) # Defer ephemerally initially
     conn = None
+    target_channel_id = TARGET_CHANNEL_ID # Use constant
+    target_channel = interaction.guild.get_channel(target_channel_id) if interaction.guild else None
+    sent_publicly = False
+
     try:
         conn = get_db_connection()
         users_with_miles = get_all_users_with_miles(conn)
-
-        # Format message using the modified function (without notes)
         message = format_balance_message(users_with_miles, interaction)
-
-        # Purge and send to the target channel
-        target_channel = interaction.guild.get_channel(TARGET_CHANNEL_ID) if interaction.guild else None
-        confirmation_message = "Displayed all balances." # Default confirmation
 
         if target_channel:
             try:
                 await target_channel.purge(limit=None)
                 await target_channel.send(message)
-                confirmation_message = "Updated all balances in the channel."
+                await interaction.followup.send(f"✅ Balances updated in <#{target_channel_id}>.", ephemeral=True)
+                sent_publicly = True
             except discord.errors.Forbidden:
-                logger.error(f"Bot lacks permissions to purge/send in channel {TARGET_CHANNEL_ID} for allbalances.")
-                confirmation_message = "Displayed all balances, but failed to update channel (permissions missing)."
-                await interaction.followup.send(message) # Send in current channel as fallback
+                logger.error(f"Bot lacks permissions to purge/send in channel {target_channel_id} for allbalances.")
+                await interaction.followup.send(f"⚠️ Balances retrieved, but couldn't update <#{target_channel_id}> (Permissions missing).\n{message}", ephemeral=True)
             except Exception as e:
-                logger.error(f"Error purging/sending allbalances message to {TARGET_CHANNEL_ID}: {e}")
-                confirmation_message = "Displayed all balances, but failed to update channel (error)."
-                await interaction.followup.send(message) # Send in current channel as fallback
+                logger.error(f"Error purging/sending allbalances message to {target_channel_id}: {e}")
+                await interaction.followup.send(f"⚠️ Balances retrieved, but failed to update <#{target_channel_id}> (Error).\n{message}", ephemeral=True)
         else:
-            logger.warning(f"Target channel {TARGET_CHANNEL_ID} not found for allbalances.")
-            confirmation_message = "Displayed all balances (target channel not found)."
-            await interaction.followup.send(message) # Send in current channel if target not found
-
-        # If message wasn't sent via followup already, send confirmation
-        # (This logic might need refinement depending on desired behavior)
-        # await interaction.followup.send(confirmation_message, ephemeral=True) # Maybe remove this if message always sent publicly
+            logger.warning(f"Target channel {target_channel_id} not found for allbalances.")
+            await interaction.followup.send(f"⚠️ Target channel <#{target_channel_id}> not found. Displaying balances here:\n{message}", ephemeral=True)
 
     except psycopg2.Error as db_err:
         logger.error(f"Database error in /allbalances command: {db_err}", exc_info=True)
-        await interaction.followup.send("❌ A database error occurred while retrieving balances.", ephemeral=True)
+        await interaction.followup.send("❌ A database error occurred retrieving balances.", ephemeral=True)
     except Exception as e:
         logger.error(f"Error in /allbalances command: {e}", exc_info=True)
-        await interaction.followup.send("❌ An error occurred while displaying balances.", ephemeral=True)
+        await interaction.followup.send("❌ An error occurred displaying balances.", ephemeral=True)
     finally:
-        if conn:
-            conn.close()
+        if conn and not conn.closed: conn.close()
 
 
-@client.tree.command(name="car_usage")
-async def car_usage(interaction: discord.Interaction):
-    """Displays total miles driven by each user and per car."""
-    await interaction.response.defer(thinking=True)
-    conn = None
-    try:
-      conn = get_db_connection()
-      users_with_miles = get_all_users_with_miles(conn)
-      message = format_car_usage_message(users_with_miles) # Format the usage stats
-      await interaction.followup.send(message) # Send publicly
-    except psycopg2.Error as db_err:
-        logger.error(f"Database error in /car_usage command: {db_err}", exc_info=True)
-        await interaction.followup.send("❌ A database error occurred retrieving car usage.", ephemeral=True)
-    except Exception as e:
-        logger.error(f"Error in /car_usage command: {e}", exc_info=True)
-        await interaction.followup.send("❌ An error occurred displaying car usage.", ephemeral=True)
-    finally:
-       if conn:
-            conn.close()
+# --- /car_usage command REMOVED ---
 
 
 @client.tree.command(name="settle")
 async def settle(interaction: discord.Interaction):
     """Resets all user balances to zero."""
-    await interaction.response.defer(thinking=True)
+    # Keep this command as is from previous version
+    await interaction.response.defer(thinking=True, ephemeral=True)
     conn = None
+    target_channel_id = TARGET_CHANNEL_ID
+    target_channel = interaction.guild.get_channel(target_channel_id) if interaction.guild else None
+
     try:
         conn = get_db_connection()
-        # Get current user data to iterate through all known users
         users_with_miles = get_all_users_with_miles(conn)
         logger.info(f"Settling balances for {len(users_with_miles)} users...")
         for user_id, user_data in users_with_miles.items():
             user_name = user_data["name"]
-            # Ensure user exists (though get_all_users should only return existing ones)
-            # get_or_create_user(conn, user_id, user_name)
-            save_user_data(conn, user_id, user_name, 0) # Set total_owed to 0
+            save_user_data(conn, user_id, user_name, 0)
             logger.info(f"Reset balance for user {user_name} ({user_id})")
 
-        # Get the freshly reset balances to display
-        users_with_miles_reset = get_all_users_with_miles(conn)
+        users_with_miles_reset = get_all_users_with_miles(conn) # Fetch again to show 0 balances
         message = "**Balances have been settled to zero.**\n\n"
         message += format_balance_message(users_with_miles_reset, interaction)
-
-        # Purge and send to target channel
-        target_channel = interaction.guild.get_channel(TARGET_CHANNEL_ID) if interaction.guild else None
-        confirmation_message = "Balances settled."
 
         if target_channel:
              try:
                  await target_channel.purge(limit=None)
                  await target_channel.send(message)
-                 confirmation_message = "Balances settled and message sent to channel."
+                 await interaction.followup.send(f"✅ Balances settled and updated in <#{target_channel_id}>.", ephemeral=True)
              except discord.errors.Forbidden:
-                 logger.error(f"Bot lacks permissions to purge/send in channel {TARGET_CHANNEL_ID} for settle.")
-                 confirmation_message = "Balances settled, but failed to update channel (permissions missing)."
-                 await interaction.followup.send(message) # Fallback
+                 logger.error(f"Bot lacks permissions to purge/send in channel {target_channel_id} for settle.")
+                 await interaction.followup.send(f"⚠️ Balances settled, but couldn't update <#{target_channel_id}> (Permissions missing).\n{message}", ephemeral=True)
              except Exception as e:
-                 logger.error(f"Error purging/sending settle message to {TARGET_CHANNEL_ID}: {e}")
-                 confirmation_message = "Balances settled, but failed to update channel (error)."
-                 await interaction.followup.send(message) # Fallback
+                 logger.error(f"Error purging/sending settle message to {target_channel_id}: {e}")
+                 await interaction.followup.send(f"⚠️ Balances settled, but failed to update <#{target_channel_id}> (Error).\n{message}", ephemeral=True)
         else:
-             logger.warning(f"Target channel {TARGET_CHANNEL_ID} not found for settle.")
-             confirmation_message = "Balances settled (target channel not found)."
-             await interaction.followup.send(message) # Fallback
-
-        # See note on allbalances re: sending confirmation vs public message
-        # await interaction.followup.send(confirmation_message, ephemeral=True)
+             logger.warning(f"Target channel {target_channel_id} not found for settle.")
+             await interaction.followup.send(f"⚠️ Balances settled (Target channel <#{target_channel_id}> not found).\n{message}", ephemeral=True)
 
     except psycopg2.Error as db_err:
         logger.error(f"Database error during /settle: {db_err}", exc_info=True)
         await interaction.followup.send("❌ A database error occurred while settling balances.", ephemeral=True)
-        if conn: conn.rollback() # Rollback on DB error
+        if conn: conn.rollback()
     except Exception as e:
         logger.error(f"Error in /settle command: {e}", exc_info=True)
         await interaction.followup.send("❌ An error occurred while settling balances.", ephemeral=True)
-        if conn: conn.rollback() # Rollback on general error
+        if conn: conn.rollback()
     finally:
-        if conn:
-            conn.close()
+        if conn and not conn.closed: conn.close()
 
-
+# --- MODIFIED Help Command ---
 @client.tree.command(name="help")
 async def help(interaction: discord.Interaction):
     """Provides instructions on how to use the Gas Bot."""
-    # Updated help message reflecting new commands and changes
     help_message = f"""
 **Gas Bot User Manual**
 
-Tracks gas expenses, driving, and calculates balances. All results posted in <#{TARGET_CHANNEL_ID}>.
+Tracks gas expenses, driving, and calculates balances. Most results posted in <#{TARGET_CHANNEL_ID}>.
 
-**Core Commands:**
-
-*   `/filled` **payment** [payer]: Records a gas fill-up. Select the car filled.
-    *   `payment`: Amount paid (e.g., `42.75`).
-    *   `payer`: (Optional) User who paid (defaults to you).
-*   `/drove` **distance**: Records miles driven for distances **over 40 miles**. Select the car driven.
-    *   `distance`: Miles driven (e.g., `55.2`).
-*   `/note` **notes**: Adds/updates a note for a specific car (e.g., "Check tire pressure"). Select the car.
-
-**Mileage Shortcut Commands (1-40 miles):**
-*   Use `/1`, `/2`, `/3` ... `/40` to quickly log drives of that exact mileage.
-    *   Example: `/15` - Logs a 15-mile drive. You'll be prompted to select the car.
+**Mileage Commands (`/0` to `/100`):**
+*   Use `/0`, `/1`, `/2` ... `/100` to log drives of that mileage.
+*   **Optional Decimal:** Add a decimal from .1 to .9 using the `decimal` option.
+    *   Example: `/15` `decimal: 5` logs a drive of **15.5 miles**.
+    *   Example: `/8` logs a drive of **8.0 miles**.
+*   You will be prompted to select the car (Subaru or Mercedes).
 
 **Location Shortcut Commands:**
 *   Use these commands to log drives to common locations:
@@ -1060,28 +786,21 @@ Tracks gas expenses, driving, and calculates balances. All results posted in <#{
         loc_help.append(f"    *   `/{cmd_name}` - Drive to {data['location']} ({data['miles']} miles)")
     help_message += "\n".join(loc_help)
 
-    help_message += """
+    help_message += f"""
 
-**Balance & Info Commands:**
+**Other Commands:**
 
+*   `/filled` **payment** [payer]: Records a gas fill-up. Select the car filled.
+    *   `payment`: Amount paid (e.g., `42.75`).
+    *   `payer`: (Optional) User who paid (defaults to you).
 *   `/balance`: Shows *your* current balance (ephemeral - only you see this).
 *   `/allbalances`: Updates the main channel (<#{TARGET_CHANNEL_ID}>) with everyone's current balance.
-*   `/car_usage`: Shows total miles driven by each user and breakdown per car.
 *   `/settle`: Resets **all user balances to zero**. Use with caution!
 *   `/help`: Displays this help message (ephemeral).
 
-**Example Flow:**
-
-1.  You drive 12 miles: `/12` -> Select Car -> Bot posts result.
-2.  You drive to Woodfield Mall: `/woodfieldmall` -> Select Car -> Bot posts result.
-3.  You drive 65 miles: `/drove 65` -> Select Car -> Bot posts result.
-4.  You fill the Subaru for $50: `/filled 50` -> Select Subaru -> Bot posts result.
-5.  Check your balance: `/balance`
-6.  Update public balances: `/allbalances`
-7.  End of the month/week: `/settle` (after payments are exchanged).
+**Removed Commands:** `/drove`, `/note`, `/car_usage`
 """
     await interaction.response.send_message(help_message, ephemeral=True)
-
 
 # --- Function to start the bot (Keep As Is) ---
 async def main():
@@ -1091,14 +810,18 @@ async def main():
     if not DATABASE_URL:
         print("Error: DATABASE_URL environment variable not set.")
         return
-    async with client: # Use async context manager
+    async with client:
          await client.start(BOT_TOKEN)
-
 
 # --- Run the Bot (Keep As Is) ---
 if __name__ == "__main__":
-    # Consider adding signal handling for graceful shutdown if needed
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("Bot shutting down...")
+        print("\nBot shutting down...")
+    except psycopg2.OperationalError as db_fail:
+        # Catch potential DB connection errors during startup more gracefully
+        print(f"\nFATAL: Could not connect to database on startup: {db_fail}")
+        print("Please check DATABASE_URL environment variable and database status.")
+    except Exception as startup_err:
+        print(f"\nFATAL: An unexpected error occurred during bot startup: {startup_err}")
