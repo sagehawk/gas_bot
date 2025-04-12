@@ -567,7 +567,7 @@ async def on_ready():
     registered_commands = 0
     # Register numbered commands /0 to /100
     # Range goes up to, but does not include, the stop value
-    for i in range(0, 101):
+    for i in range(0, 71):
         try:
             cmd_func = create_number_command(i)
             client.tree.add_command(cmd_func)
