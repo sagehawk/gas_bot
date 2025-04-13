@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 # --- Car Data (Simplified) ---
 CARS = [
-    {"name": "Subaru", "mpg": 20},
+    {"name": "Subaru/Jaguar/Z3", "mpg": 20},
     {"name": "Mercedes", "mpg": 17},
 ]
 
@@ -51,6 +51,18 @@ LOCATION_COMMANDS = {
     "bui": {"miles": 14.8, "location": "Baitul Ilm"},
     "alexianhospital": {"miles": 7.2, "location": "Alexian Hospital"},
     "woodfieldmall": {"miles": 16.2, "location": "Woodfield Mall"},
+    "petalbrothers": {"miles": 10.8, "location": "Petal Brothers"},
+    "jewels": {"miles": 5.4, "location": "Jewel-Osco"},
+    "barringtontrain": {"miles": 9.2, "location": "Barrington Train Station"},
+    "palatinetrain": {"miles": 12.4, "location": "Palatine Train Station"},
+    "depauloop": {"miles": 66.2, "location": "Depaul Loop"},
+    "chicagoloop": {"miles": 66.2, "location": "Chicago Loop"},
+    "devon": {"miles": 27.4, "location": "Devon"},
+    "lincolnpark": {"miles": 58.8, "location": "Lincoln Park"},
+    "walmart": {"miles": 12.4, "location": "Walmart"},
+    "barringtondental": {"miles": 12.2, "location": "Barrington Road Dental"},
+    "homedepot": {"miles": 10.8, "location": "Home Depot"},
+    "marianos": {"miles": 8.2, "location": "Marianos"},
 }
 
 # --- Helper Functions ---
@@ -567,7 +579,7 @@ async def on_ready():
     registered_commands = 0
     # Register numbered commands /0 to /100
     # Range goes up to, but does not include, the stop value
-    for i in range(0, 71):
+    for i in range(0, 60):
         try:
             cmd_func = create_number_command(i)
             client.tree.add_command(cmd_func)
