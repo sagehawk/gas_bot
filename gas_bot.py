@@ -63,6 +63,7 @@ LOCATION_COMMANDS = {
     "barringtondental": {"miles": 12.2, "location": "Barrington Road Dental"},
     "homedepot": {"miles": 10.8, "location": "Home Depot"},
     "marianos": {"miles": 8.2, "location": "Marianos"},
+    "btt": {"miles": 14.2, "location": "Brazilian Top Team"},
 }
 
 # --- Helper Functions ---
