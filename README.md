@@ -365,7 +365,7 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 ## License
 
-[MIT](LICENSE) *(Assuming you have a LICENSE file named MIT)*
+[MIT](LICENSE)
 
 ## Support
 
