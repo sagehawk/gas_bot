@@ -2,7 +2,7 @@
 
 This Discord bot helps track shared car gas expenses within a group. It allows users to log drives, record gas fill-ups, manage payments, and view individual and group balances. The bot uses a PostgreSQL database for data persistence and is designed to be easily deployed on platforms like Railway.
 
-![image](https://github.com/user-attachments/assets/cca9fc07-e1a9-4b9d-b089-997797a890b7)
+![Demo](https://i.imgur.com/bsNL5c6.gif)
 
 ## Features
 
